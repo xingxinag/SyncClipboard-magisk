@@ -1,0 +1,2 @@
+# SyncClipboard-magisk
+root版
