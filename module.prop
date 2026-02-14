@@ -1,0 +1,7 @@
+id=syncclipboard
+name=SyncClipboard
+version=1.0.0
+versionCode=10000
+author=Your Name
+description=跨设备剪贴板同步模块 - 通过 WebDAV 同步剪贴板内容
+updateJson=

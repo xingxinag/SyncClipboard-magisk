@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncClipboard - 剪贴板同步</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .status-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-item.active {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+        
+        .status-item.error {
+            border-left-color: #f56565;
+            background: #fff5f5;
+        }
+        
+        .status-label {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.9em;
+        }
+        
+        .btn-danger {
+            background: #f56565;
+        }
+        
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2d3748;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .account-list {
+            list-style: none;
+        }
+        
+        .account-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .account-info {
+            flex: 1;
+        }
+        
+        .account-name {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .account-url {
+            font-size: 0.9em;
+            color: #718096;
+        }
+        
+        .clipboard-preview {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            font-family: 'Courier New', monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #a0aec0;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-header {
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h3 {
+            color: #2d3748;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 SyncClipboard</h1>
+            <p>基于 Root 的跨设备剪贴板同步</p>
+        </div>
+        
+        <!-- 状态面板 -->
+        <div class="card">
+            <h2>📊 状态监控</h2>
+            <div class="status-grid">
+                <div class="status-item active">
+                    <div class="status-label">服务状态</div>
+                    <div class="status-value" id="serviceStatus">运行中</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">最后同步</div>
+                    <div class="status-value" id="lastSync">--</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">已同步</div>
+                    <div class="status-value" id="syncCount">0</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">账户数量</div>
+                    <div class="status-value" id="accountCount">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 当前剪贴板 -->
+        <div class="card">
+            <h2>📋 当前剪贴板</h2>
+            <div class="clipboard-preview" id="clipboardContent">正在加载...</div>
+            <div class="button-group" style="margin-top: 15px;">
+                <button class="btn btn-small" onclick="refreshClipboard()">刷新</button>
+                <button class="btn btn-small" onclick="syncNow()">立即同步</button>
+            </div>
+        </div>
+        
+        <!-- WebDAV 账户 -->
+        <div class="card">
+            <h2>☁️ WebDAV 账户</h2>
+            <ul class="account-list" id="accountList">
+                <li class="empty-state">暂无账户</li>
+            </ul>
+            <button class="btn" onclick="showAddAccount()">+ 添加账户</button>
+        </div>
+        
+        <!-- 同步设置 -->
+        <div class="card">
+            <h2>⚙️ 同步设置</h2>
+            <div class="form-group">
+                <label>同步模式</label>
+                <select id="syncMode">
+                    <option value="auto">自动同步</option>
+                    <option value="manual">手动同步</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>并发上传数</label>
+                <input type="number" id="concurrentUploads" value="3" min="1" max="10">
+            </div>
+            <button class="btn" onclick="saveSettings()">保存设置</button>
+        </div>
+    </div>
+    
+    <!-- 添加账户模态框 -->
+    <div class="modal" id="addAccountModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加 WebDAV 账户</h3>
+            </div>
+            <div class="form-group">
+                <label>账户名称</label>
+                <input type="text" id="accountName" placeholder="我的坚果云">
+            </div>
+            <div class="form-group">
+                <label>WebDAV URL</label>
+                <input type="text" id="webdavUrl" placeholder="https://dav.jianguoyun.com/dav/">
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="username">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="password">
+            </div>
+            <div class="button-group">
+                <button class="btn" onclick="testConnection()">测试连接</button>
+                <button class="btn" onclick="addAccount()">添加</button>
+                <button class="btn btn-danger" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // API 基础路径
+        const API_BASE = '';
+        
+        // 加载初始数据
+        async function loadData() {
+            try {
+                // 加载配置
+                const config = await fetch(`${API_BASE}/api/config`).then(r => r.json());
+                
+                // 更新状态
+                document.getElementById('accountCount').textContent = config.accounts?.length || 0;
+                document.getElementById('syncMode').value = config.sync?.mode || 'auto';
+                document.getElementById('concurrentUploads').value = config.sync?.concurrent_uploads || 3;
+                
+                // 更新账户列表
+                updateAccountList(config.accounts || []);
+                
+                // 加载剪贴板内容
+                await refreshClipboard();
+                
+                // 加载同步状态
+                const status = await fetch(`${API_BASE}/api/sync/status`).then(r => r.json());
+                if (status.last_sync) {
+                    document.getElementById('lastSync').textContent = 
+                        new Date(status.last_sync).toLocaleTimeString('zh-CN');
+                }
+                document.getElementById('syncCount').textContent = status.count || 0;
+                
+            } catch (err) {
+                console.error('加载数据失败:', err);
+            }
+        }
+        
+        // 刷新剪贴板
+        async function refreshClipboard() {
+            try {
+                const response = await fetch(`${API_BASE}/api/clipboard`);
+                const data = await response.json();
+                const content = data.text || '(空)';
+                document.getElementById('clipboardContent').textContent = content;
+            } catch (err) {
+                document.getElementById('clipboardContent').textContent = '获取失败: ' + err.message;
+            }
+        }
+        
+        // 立即同步
+        async function syncNow() {
+            try {
+                const btn = event.target;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> 同步中...';
+                
+                await fetch(`${API_BASE}/api/sync/now`, { method: 'POST' });
+                
+                btn.disabled = false;
+                btn.textContent = '立即同步';
+                
+                await loadData();
+                alert('同步完成!');
+            } catch (err) {
+                alert('同步失败: ' + err.message);
+            }
+        }
+        
+        // 更新账户列表
+        function updateAccountList(accounts) {
+            const list = document.getElementById('accountList');
+            if (!accounts || accounts.length === 0) {
+                list.innerHTML = '<li class="empty-state">暂无账户</li>';
+                return;
+            }
+            
+            list.innerHTML = accounts.map((acc, index) => `
+                <li class="account-item">
+                    <div class="account-info">
+                        <div class="account-name">${acc.name}</div>
+                        <div class="account-url">${acc.url}</div>
+                    </div>
+                    <button class="btn btn-small btn-danger" onclick="removeAccount(${index})">删除</button>
+                </li>
+            `).join('');
+        }
+        
+        // 显示添加账户模态框
+        function showAddAccount() {
+            document.getElementById('addAccountModal').classList.add('active');
+        }
+        
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('addAccountModal').classList.remove('active');
+            // 清空表单
+            document.getElementById('accountName').value = '';
+            document.getElementById('webdavUrl').value = '';
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+        
+        // 测试连接
+        async function testConnection() {
+            const url = document.getElementById('webdavUrl').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!url || !username || !password) {
+                alert('请填写完整信息');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/webdav/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, username, password })
+                });
+                
+                if (response.ok) {
+                    alert('✅ 连接成功!');
+                } else {
+                    alert('❌ 连接失败，请检查配置');
+                }
+            } catch (err) {
+                alert('测试失败: ' + err.message);
+            }
+        }
+        
+        // 添加账户
+        async function addAccount() {
+            const account = {
+                name: document.getElementById('accountName').value,
+                url: document.getElementById('webdavUrl').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value
+            };
+            
+            if (!account.name || !account.url || !account.username || !account.password) {
+                alert('请填写完整信息');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                const config = await response.json();
+                
+                config.accounts = config.accounts || [];
+                config.accounts.push(account);
+                
+                await fetch(`${API_BASE}/api/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                closeModal();
+                await loadData();
+                alert('账户添加成功!');
+            } catch (err) {
+                alert('添加失败: ' + err.message);
+            }
+        }
+        
+        // 删除账户
+        async function removeAccount(index) {
+            if (!confirm('确定要删除这个账户吗?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                const config = await response.json();
+                
+                config.accounts.splice(index, 1);
+                
+                await fetch(`${API_BASE}/api/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                await loadData();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+        
+        // 保存设置
+        async function saveSettings() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                const config = await response.json();
+                
+                config.sync.mode = document.getElementById('syncMode').value;
+                config.sync.concurrent_uploads = parseInt(document.getElementById('concurrentUploads').value);
+                
+                await fetch(`${API_BASE}/api/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                alert('设置已保存!');
+            } catch (err) {
+                alert('保存失败: ' + err.message);
+            }
+        }
+        
+        // 页面加载时初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            // 每 5 秒刷新一次剪贴板和状态
+            setInterval(() => {
+                refreshClipboard();
+                fetch(`${API_BASE}/api/sync/status`)
+                    .then(r => r.json())
+                    .then(status => {
+                        if (status.last_sync) {
+                            document.getElementById('lastSync').textContent = 
+                                new Date(status.last_sync).toLocaleTimeString('zh-CN');
+                        }
+                        document.getElementById('syncCount').textContent = status.count || 0;
+                    });
+            }, 5000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+我想整个类似SyncClipboard的模块，并且同时支持由kernelsu演变的分支和由magisk演变的分支
+
+前提须知，
+注意切记：这个模块是root用户使用的，你遇到90%的问题或方案都可以优先考虑使用root特权解决，必要时100%
+注意1：之前你已经帮我搞了2个残次品，残品1：C:\Users\QWQ\Downloads\SyncClipboard-master\clipboard-whitelist-module残品2：C:\Users\QWQ\Downloads\SyncClipboard-master\SyncClipboard-magisk完成度较高
+注意2：一次安装，支持所有环境（Magisk/KernelSU/APatch 等）参考"C:\Users\QWQ\Downloads\SyncClipboard-master\环境webui示例\支持所有环境MagiskKernelSUAPatch 等.txt"
+
+
+1.
+✅ 剪贴板读写（不受环境限制）
+✅ WebUI 配置界面（WebDAV 设置）
+✅ 文件上传/下载管理
+✅ 快速设置磁贴（通知栏快捷按钮）
+2.
+ 最小化 APK + Web UI
+
+包含一个极简 APK（~100KB）仅提供：
+快速设置磁贴服务
+后台剪贴板监听服务
+点击磁贴时打开内置浏览器访问 Web UI
+所有配置界面用 Web 实现
+
+3. 我选C（A与B我都想要）
+A. 全自动同步
+
+后台服务持续监听剪贴板变化
+复制任何内容时自动上传到 WebDAV
+定期（如每 5 秒）从 WebDAV 下载最新内容
+类似 SyncClipboard 的自动模式
+优点：无需手动操作，无缝体验
+缺点：可能消耗更多电量和流量
+B. 手动触发同步
+
+点击快速设置磁贴上传当前剪贴板
+再次点击从 WebDAV 下载最新内容
+或者：一次点击=上传，长按=下载
+优点：可控，省电省流量
+缺点：需要手动操作
+C. 智能混合模式
+
+默认手动触发
+可在 Web UI 中配置为自动模式
+可设置自动同步的条件（WiFi 下、充电时等）
+优点：灵活可配置
+缺点：实现稍复杂
+
+4.Web UI 技术栈
+
+. Tailwind CSS + Alpine.js（推荐）
+
+Alpine.js 处理交互逻辑（~15KB）
+Tailwind CSS 处理样式（~10KB purged）
+组件库：DaisyUI（基于 Tailwind）
+参考界面：类似 SyncClipboard 的现代扁平风格
+优点：开发快，体积小，美观
+缺点：需要简单构建步骤（可选）
+
+5.
+
+混合方案（推荐）
+
+核心服务器：Go 编译的二进制（~2-3MB）
+处理 HTTP 服务
+WebDAV 客户端
+文件管理 API
+剪贴板 API
+Android APK 部分：
+快速设置磁贴
+后台服务（剪贴板监听）
+启动/停止 Web 服务器
+系统文件选择器集成
+Web UI：Tailwind + Alpine.js（~30KB）
+
+6.
+✅ 一次安装，支持所有环境（Magisk/KernelSU/APatch 等）参考"C:\Users\QWQ\Downloads\SyncClipboard-master\环境webui示例\支持所有环境MagiskKernelSUAPatch 等.txt"
+✅ 自动选择正确的 ARM 架构（64 位/32 位）
+✅ 端口 8964 可在配置文件中修改
+✅ 模块 ID 根据环境动态生成，避免冲突
+
+7.希望模块的名称
+项目名：SyncClipboard-magisk
+显示名：动态（SyncClipboard (Magisk) 或 SyncClipboard (KernelSU)）
+模块 ID：动态（syncclipboard_magisk 或 syncclipboard_ksu）
+
+8.这个模块是root用户使用的，你遇到90%的问题或方案都可以优先考虑使用root特权解决，必要时100%
