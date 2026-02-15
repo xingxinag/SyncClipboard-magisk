@@ -1,5 +1,5 @@
-module clipserver
+module github.com/yourusername/syncclipboard-android/clipserver
 
 go 1.21
 
-require github.com/studio-b12/gowebdav v0.0.0-20231103135315-86ccb3f89036
+require github.com/studio-b12/gowebdav v0.9.0 // indirect

@@ -1,7 +1,0 @@
-id=clipboard_whitelist_kernelsu
-name=Clipboard Whitelist (KernelSU)
-version=v1.0.0
-versionCode=10000
-author=SyncClipboard Community
-description=允许应用在后台读取剪贴板，解除Android 10+系统限制。适用于KernelSU环境。
-updateJson=https://raw.githubusercontent.com/yourrepo/clipboard-whitelist/master/update_ksu.json

@@ -1,0 +1,7 @@
+{
+  "webdav_url": "",
+  "webdav_username": "",
+  "webdav_password": "",
+  "sync_interval": 60,
+  "enabled": false
+}

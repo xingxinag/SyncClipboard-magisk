@@ -125,9 +125,18 @@ extract_files() {
   unzip -o "$ZIPFILE" 'service.sh' -d "$MODPATH" >&2
   unzip -o "$ZIPFILE" 'uninstall.sh' -d "$MODPATH" >&2
   
+  # Extract post-fs-data.sh if exists
+  unzip -o "$ZIPFILE" 'post-fs-data.sh' -d "$MODPATH" >&2 2>/dev/null || true
+  
+  # Extract SELinux rules if exists
+  unzip -o "$ZIPFILE" 'sepolicy.rule' -d "$MODPATH" >&2 2>/dev/null || true
+  
   # Extract WebUI
   ui_print "- 提取 Web UI..."
   unzip -o "$ZIPFILE" "webui/*" -d "$MODPATH" >&2
+  
+  # Extract config template
+  unzip -o "$ZIPFILE" "config/*" -d "$MODPATH" >&2 2>/dev/null || true
   
   # Extract architecture-specific binaries
   mkdir -p "$MODPATH/bin"
@@ -181,19 +190,11 @@ setup_config() {
     ui_print "- 创建默认配置文件..."
     cat > "$CONFIG_DIR/config.json" << 'EOF'
 {
-  "port": 8964,
-  "accounts": [],
-  "sync": {
-    "mode": "auto",
-    "concurrent_uploads": 3,
-    "concurrent_downloads": 3,
-    "chunk_size_mb": 1,
-    "max_retries": 3,
-    "conditions": {}
-  },
-  "history": {
-    "retention_days": 30
-  }
+  "webdav_url": "",
+  "webdav_username": "",
+  "webdav_password": "",
+  "sync_interval": 60,
+  "enabled": false
 }
 EOF
   else
@@ -232,15 +233,24 @@ setup_environment_specific() {
   case "$ENV_TYPE" in
     kernelsu)
       ui_print "- 配置 KernelSU 环境..."
-      # KernelSU-specific setup if needed
+      # 安装 SELinux 规则
+      if [ -f "$MODPATH/sepolicy.rule" ]; then
+        ui_print "- 安装 SELinux 规则..."
+        # KernelSU 会自动加载 sepolicy.rule
+      fi
       ;;
     apatch)
       ui_print "- 配置 APatch 环境..."
-      # APatch-specific setup if needed
+      # 安装 SELinux 规则
+      if [ -f "$MODPATH/sepolicy.rule" ]; then
+        ui_print "- 安装 SELinux 规则..."
+        # APatch 会自动加载 sepolicy.rule
+      fi
       ;;
     magisk)
       ui_print "- 配置 Magisk 环境..."
-      # Magisk-specific setup if needed
+      # Magisk 不需要 sepolicy.rule 文件
+      # 但我们保留它以便兼容
       ;;
   esac
 }

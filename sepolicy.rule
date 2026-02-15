@@ -1,0 +1,28 @@
+# SELinux 规则 - 允许剪贴板访问
+# 适用于 KernelSU/APatch
+
+# 允许访问剪贴板服务
+allow system_server clipboard_service:service_manager find
+allow untrusted_app clipboard_service:service_manager find
+
+# 允许读写剪贴板
+allow system_server clipboard:file { read write open }
+allow untrusted_app clipboard:file { read write open }
+
+# 允许执行 su 命令
+allow untrusted_app su:file { execute execute_no_trans }
+allow untrusted_app su:process { transition }
+
+# 允许访问 /data/adb/syncclipboard
+allow system_server syncclipboard_data_file:dir { search read open }
+allow system_server syncclipboard_data_file:file { read open getattr }
+allow untrusted_app syncclipboard_data_file:dir { search read open }
+allow untrusted_app syncclipboard_data_file:file { read open getattr }
+
+# 允许网络访问（WebDAV）
+allow untrusted_app node:tcp_socket { node_bind }
+allow untrusted_app port:tcp_socket { name_bind }
+
+# 允许 clipserver 进程
+allow clipserver_exec clipserver_exec:file { execute execute_no_trans }
+allow clipserver system_server:unix_stream_socket { connectto }

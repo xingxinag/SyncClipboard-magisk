@@ -1,233 +1,342 @@
-# Clipboard Whitelist Module
-# 剪贴板白名单模块
+# SyncClipboard
 
-## 简介
-
-这是一个同时支持 **Magisk** 和 **KernelSU** 的 Android Root 模块，用于解除 Android 10+ 系统对应用后台读取剪贴板的限制。
-
-## 功能特性
-
-- ✅ 同时支持 Magisk 和 KernelSU
-- ✅ 自动检测运行环境
-- ✅ 允许指定应用在后台读取剪贴板
-- ✅ 支持自定义白名单配置
-- ✅ 适用于 Android 10 及以上版本
-- ✅ 开机自动激活
-- ✅ 无需手动重启应用
-
-## 背景
-
-Android 10 (API 29) 及以上版本引入了新的隐私保护机制，限制应用在后台读取剪贴板内容。这对于一些需要后台同步剪贴板的应用（如 SyncClipboard、AutoX.js 等）造成了困扰。
-
-本模块通过修改系统的 AppOps 权限设置，为指定的应用授予后台读取剪贴板的权限，从而解决这一问题。
-
-## 系统要求
-
-- Android 10 (API 29) 或更高版本
-- 已安装 Magisk (v20.4+) 或 KernelSU
-- Root 权限
-
-## 安装方法
-
-### Magisk 用户
-
-1. 下载 `clipboard_whitelist_magisk.zip`
-2. 打开 Magisk Manager
-3. 点击「模块」
-4. 点击「从本地安装」
-5. 选择下载的 zip 文件
-6. 等待安装完成
-7. 重启设备
-
-### KernelSU 用户
-
-1. 下载 `clipboard_whitelist_kernelsu.zip`
-2. 打开 KernelSU Manager
-3. 点击「模块」
-4. 点击右上角「+」或「安装」
-5. 选择下载的 zip 文件
-6. 等待安装完成
-7. 重启设备
-
-## 使用方法
-
-### 方法一：使用预设白名单
-
-模块安装后会自动为预设的应用授予权限。默认包含：
-- `com.example.syncclipboard`
-- `com.github.jericx.syncclipboard`
-
-### 方法二：自定义白名单
-
-1. 使用文件管理器（需要 Root 权限）打开：
-   ```
-   /data/adb/clipboard_whitelist.txt
-   ```
-
-2. 添加需要授权的应用包名，每行一个：
-   ```
-   # 示例：
-   com.example.myapp
-   com.github.yourapp
-   com.autoxjs.autoxjs
-   ```
-
-3. 保存文件后重启设备，或手动执行：
-   ```bash
-   su -c "/data/adb/modules/clipboard_whitelist_*/clipboard_whitelist.sh"
-   ```
-
-### 如何查找应用包名
-
-1. 使用 ADB:
-   ```bash
-   adb shell pm list packages | grep 应用名称关键词
-   ```
-
-2. 使用应用信息查看器（如 Package Manager、应用管家等）
-
-3. 使用终端模拟器（需要 Root）：
-   ```bash
-   pm list packages | grep 应用名称关键词
-   ```
-
-## 配置说明
-
-### 模块目录结构
-
-```
-clipboard-whitelist-module/
-├── magisk/
-│   └── module.prop           # Magisk 模块配置
-├── kernelsu/
-│   └── module.prop           # KernelSU 模块配置
-├── common/
-│   ├── customize.sh          # 安装脚本
-│   ├── service.sh            # 开机服务脚本
-│   └── clipboard_whitelist.sh # 核心功能脚本
-└── README.md                 # 本文档
-```
-
-### 白名单配置文件
-
-位置：`/data/adb/clipboard_whitelist.txt`
-
-格式：
-```
-# 这是注释
-com.package.name1
-com.package.name2
-# 可以添加更多应用包名
-```
-
-## 常见问题
-
-### Q1: 安装后不生效？
-
-1. 确认已重启设备
-2. 检查应用包名是否正确
-3. 查看日志：
-   ```bash
-   logcat -s ClipboardWhitelist
-   ```
-
-### Q2: 如何验证模块是否工作？
-
-1. 检查模块状态：
-   - Magisk: 在 Magisk Manager 中查看模块是否已启用
-   - KernelSU: 在 KernelSU Manager 中查看模块是否已启用
-
-2. 查看应用权限：
-   ```bash
-   appops get 应用包名 READ_CLIPBOARD
-   ```
-   应该显示 `allow`
-
-3. 查看日志：
-   ```bash
-   logcat | grep ClipboardWhitelist
-   ```
-
-### Q3: Android 版本低于 10 可以使用吗？
-
-Android 10 以下版本没有后台剪贴板读取限制，不需要使用本模块。模块会自动检测系统版本，在低版本上不会执行任何操作。
-
-### Q4: Magisk 和 KernelSU 版本有什么区别？
-
-功能完全相同，只是模块 ID 和配置文件不同，以适配不同的 Root 管理器。
-
-### Q5: 可以同时安装两个版本吗？
-
-不建议。选择与你的 Root 管理器匹配的版本即可。
-
-## 卸载方法
-
-### Magisk
-1. 打开 Magisk Manager
-2. 点击「模块」
-3. 找到本模块，点击删除图标
-4. 重启设备
-
-### KernelSU
-1. 打开 KernelSU Manager
-2. 点击「模块」
-3. 找到本模块，点击卸载
-4. 重启设备
-
-## 技术原理
-
-本模块通过 `appops` 命令修改应用的 `READ_CLIPBOARD` 权限：
-
-```bash
-appops set <package_name> READ_CLIPBOARD allow
-```
-
-这是 Android 系统提供的合法权限管理方式，不会破坏系统完整性。
-
-## 兼容性
-
-已测试的环境：
-- ✅ Android 10 - 14
-- ✅ Magisk 20.4+
-- ✅ KernelSU 0.6.0+
-
-## 适用场景
-
-本模块适用于以下应用和场景：
-- SyncClipboard（剪贴板同步）
-- AutoX.js（自动化脚本）
-- Tasker（任务自动化）
-- 其他需要后台读取剪贴板的应用
-
-## 隐私说明
-
-⚠️ **重要提示**：
-- 本模块仅授予指定应用读取剪贴板的权限
-- 请只为可信任的应用授权
-- 授权后，应用可以在后台读取您复制的所有内容
-- 建议定期检查白名单，移除不再需要的应用
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 许可证
-
-MIT License
-
-## 相关项目
-
-- [SyncClipboard](https://github.com/Jeric-X/SyncClipboard) - 跨平台剪贴板同步工具
-- [Riru-ClipboardWhitelist](https://github.com/Kr328/Riru-ClipboardWhitelist) - 基于 Riru 的剪贴板白名单
-
-## 更新日志
-
-### v1.0.0 (2024-02-09)
-- 🎉 首次发布
-- ✅ 支持 Magisk 和 KernelSU
-- ✅ 支持 Android 10-14
-- ✅ 支持自定义白名单
+[中文](#中文) | [English](#english)
 
 ---
 
-**注意**: 本模块仅用于学习和研究目的，请勿用于非法用途。
+## 中文
+
+基于 Root 权限的跨设备剪贴板同步 Magisk/KernelSU/APatch 模块。
+
+### ✨ 特性
+
+- 🔄 **自动同步** - 后台自动同步剪贴板内容到 WebDAV
+- ☁️ **WebDAV 支持** - 兼容坚果云、Nextcloud 等 WebDAV 服务
+- 🌐 **Web UI** - 现代化的 Web 配置界面（支持中英文）
+- 🔧 **灵活配置** - 可配置同步间隔、启用/禁用自动同步
+- 📱 **通用兼容** - 一次安装，支持 Magisk/KernelSU/APatch
+- 🏗️ **多架构** - 支持 ARM64/ARMv7/x86/x86_64
+
+### 📋 系统要求
+
+- **Android**: 8.0+ (API 26+)
+- **Root 环境**:
+  - Magisk 26.4+ 或
+  - KernelSU 0.6.6+ 或
+  - APatch 0.10.7+
+
+### 🚀 安装
+
+1. 下载最新的 `SyncClipboard_v1.0.0.zip`
+2. 在 Magisk/KernelSU/APatch 管理器中安装模块
+3. 重启设备
+4. 访问 `http://localhost:8964` 配置 WebDAV
+
+### ⚙️ 配置
+
+#### Web UI 配置
+
+访问 `http://localhost:8964` 进行配置：
+
+1. **WebDAV 配置**
+   - WebDAV URL: 你的 WebDAV 服务器地址
+   - 用户名: WebDAV 账户用户名
+   - 密码: WebDAV 账户密码
+
+2. **同步设置**
+   - 同步间隔: 自动同步的时间间隔（秒）
+   - 启用自动同步: 开启/关闭自动同步功能
+
+#### 命令行配置
+
+配置文件位于: `/data/adb/syncclipboard/config.json`
+
+```json
+{
+  "webdav_url": "https://dav.jianguoyun.com/dav/",
+  "webdav_username": "your_username",
+  "webdav_password": "your_password",
+  "sync_interval": 60,
+  "enabled": true
+}
+```
+
+### 📖 使用说明
+
+#### 自动同步模式
+
+启用自动同步后，模块会：
+1. 每隔指定时间检查剪贴板内容
+2. 如果内容有变化，自动上传到 WebDAV
+3. 在后台持续运行，无需手动操作
+
+#### 手动同步
+
+在 Web UI 中点击"立即同步"按钮，手动触发一次同步。
+
+### 🔧 API 端点
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/api/config` | GET | 获取配置 |
+| `/api/config` | POST | 更新配置 |
+| `/api/clipboard` | GET | 获取剪贴板内容 |
+| `/api/sync/now` | POST | 立即同步 |
+| `/api/sync/status` | GET | 同步状态 |
+
+### 📁 项目结构
+
+```
+SyncClipboard-magisk/
+├── bin/                    # 编译的二进制文件
+│   ├── arm64-v8a/
+│   ├── armeabi-v7a/
+│   ├── x86_64/
+│   └── x86/
+├── clipserver/             # Go 后端源码
+│   ├── cmd/clipserver/     # 主程序
+│   └── internal/           # 内部模块
+│       ├── clipboard/      # 剪贴板处理
+│       ├── config/         # 配置管理
+│       ├── handlers/       # HTTP 处理器
+│       ├── sync/           # 同步管理器
+│       └── webdav/         # WebDAV 客户端
+├── webui/                  # Web UI
+├── customize.sh            # 安装脚本
+├── service.sh              # 服务脚本
+└── module.prop             # 模块信息
+```
+
+### 🛠️ 开发
+
+#### 构建模块
+
+```bash
+# Linux/macOS
+bash build.sh
+
+# Windows (需要 WSL 或 Git Bash)
+bash build.sh
+```
+
+#### 编译 Go 后端
+
+```bash
+cd clipserver
+
+# 本地测试
+go build -o clipserver ./cmd/clipserver
+
+# 交叉编译 (ARM64)
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
+```
+
+#### 运行测试
+
+```bash
+cd clipserver
+go test ./... -v
+```
+
+### 🐛 故障排除
+
+#### 服务未启动
+
+```bash
+# 检查服务状态
+ps | grep clipserver
+
+# 查看日志
+cat /data/adb/syncclipboard/clipserver.log
+
+# 手动启动
+/data/adb/modules/syncclipboard/bin/arm64-v8a/clipserver -port 8964 -config /data/adb/syncclipboard/config.json
+```
+
+#### 无法访问 Web UI
+
+1. 确认服务已启动
+2. 检查端口是否被占用: `netstat -tuln | grep 8964`
+3. 尝试使用 `http://127.0.0.1:8964` 访问
+
+#### 剪贴板读取失败
+
+确保模块已正确安装并重启设备。剪贴板操作需要 Root 权限。
+
+### 📝 更新日志
+
+#### v1.0.0 (2026-02-15)
+
+- ✅ 初始版本发布
+- ✅ 支持 WebDAV 同步
+- ✅ 自动/手动同步模式
+- ✅ Web UI 配置界面
+- ✅ 多语言支持（中文/英文）
+- ✅ 通用环境支持（Magisk/KernelSU/APatch）
+
+### 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+### 📄 许可证
+
+MIT License
+
+---
+
+## English
+
+Root-based cross-device clipboard synchronization module for Magisk/KernelSU/APatch.
+
+### ✨ Features
+
+- 🔄 **Auto Sync** - Automatically sync clipboard content to WebDAV in background
+- ☁️ **WebDAV Support** - Compatible with Jianguoyun, Nextcloud, and other WebDAV services
+- 🌐 **Web UI** - Modern web configuration interface (Chinese/English)
+- 🔧 **Flexible Config** - Configurable sync interval, enable/disable auto sync
+- 📱 **Universal** - One installation for Magisk/KernelSU/APatch
+- 🏗️ **Multi-arch** - Supports ARM64/ARMv7/x86/x86_64
+
+### 📋 Requirements
+
+- **Android**: 8.0+ (API 26+)
+- **Root Environment**:
+  - Magisk 26.4+ or
+  - KernelSU 0.6.6+ or
+  - APatch 0.10.7+
+
+### 🚀 Installation
+
+1. Download the latest `SyncClipboard_v1.0.0.zip`
+2. Install the module in Magisk/KernelSU/APatch Manager
+3. Reboot device
+4. Visit `http://localhost:8964` to configure WebDAV
+
+### ⚙️ Configuration
+
+#### Web UI Configuration
+
+Visit `http://localhost:8964` to configure:
+
+1. **WebDAV Config**
+   - WebDAV URL: Your WebDAV server address
+   - Username: WebDAV account username
+   - Password: WebDAV account password
+
+2. **Sync Settings**
+   - Sync Interval: Time interval for auto sync (seconds)
+   - Enable Auto Sync: Turn on/off auto sync feature
+
+#### Command Line Configuration
+
+Config file location: `/data/adb/syncclipboard/config.json`
+
+```json
+{
+  "webdav_url": "https://dav.jianguoyun.com/dav/",
+  "webdav_username": "your_username",
+  "webdav_password": "your_password",
+  "sync_interval": 60,
+  "enabled": true
+}
+```
+
+### 📖 Usage
+
+#### Auto Sync Mode
+
+When auto sync is enabled, the module will:
+1. Check clipboard content at specified intervals
+2. Automatically upload to WebDAV if content changes
+3. Run continuously in background, no manual operation needed
+
+#### Manual Sync
+
+Click "Sync Now" button in Web UI to manually trigger a sync.
+
+### 🔧 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/config` | GET | Get configuration |
+| `/api/config` | POST | Update configuration |
+| `/api/clipboard` | GET | Get clipboard content |
+| `/api/sync/now` | POST | Sync now |
+| `/api/sync/status` | GET | Sync status |
+
+### 🛠️ Development
+
+#### Build Module
+
+```bash
+# Linux/macOS
+bash build.sh
+
+# Windows (requires WSL or Git Bash)
+bash build.sh
+```
+
+#### Compile Go Backend
+
+```bash
+cd clipserver
+
+# Local testing
+go build -o clipserver ./cmd/clipserver
+
+# Cross compile (ARM64)
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
+```
+
+#### Run Tests
+
+```bash
+cd clipserver
+go test ./... -v
+```
+
+### 🐛 Troubleshooting
+
+#### Service Not Started
+
+```bash
+# Check service status
+ps | grep clipserver
+
+# View logs
+cat /data/adb/syncclipboard/clipserver.log
+
+# Start manually
+/data/adb/modules/syncclipboard/bin/arm64-v8a/clipserver -port 8964 -config /data/adb/syncclipboard/config.json
+```
+
+#### Cannot Access Web UI
+
+1. Confirm service is running
+2. Check if port is occupied: `netstat -tuln | grep 8964`
+3. Try accessing `http://127.0.0.1:8964`
+
+#### Clipboard Read Failed
+
+Ensure the module is properly installed and device is rebooted. Clipboard operations require Root privileges.
+
+### 📝 Changelog
+
+#### v1.0.0 (2026-02-15)
+
+- ✅ Initial release
+- ✅ WebDAV sync support
+- ✅ Auto/manual sync modes
+- ✅ Web UI configuration interface
+- ✅ Multi-language support (Chinese/English)
+- ✅ Universal environment support (Magisk/KernelSU/APatch)
+
+### 🤝 Contributing
+
+Issues and Pull Requests are welcome!
+
+### 📄 License
+
+MIT License

@@ -59,31 +59,45 @@ info "清理完成"
 if [ "$SKIP_BUILD" = false ]; then
     info "[3/6] 编译 Go 二进制文件..."
     
-    cd ../clipserver
+    cd clipserver
     
-    # Define architectures
-    declare -A ARCHS=(
-        ["arm64-v8a"]="linux/arm64"
-        ["armeabi-v7a"]="linux/arm"
-        ["x86_64"]="linux/amd64"
-        ["x86"]="linux/386"
-    )
+    # Build for arm64-v8a
+    info "  编译 arm64-v8a..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
+    if [ $? -eq 0 ]; then
+        info "  ✓ arm64-v8a 编译成功"
+    else
+        error "  ✗ arm64-v8a 编译失败"
+    fi
     
-    for arch in "${!ARCHS[@]}"; do
-        info "  编译 $arch..."
-        GOOS=linux GOARCH=${ARCHS[$arch]#*/} \
-            go build -ldflags="-s -w" \
-            -o "../SyncClipboard-magisk/bin/$arch/clipserver" \
-            ./cmd/clipserver
-        
-        if [ $? -eq 0 ]; then
-            info "  ✓ $arch 编译成功"
-        else
-            error "  ✗ $arch 编译失败"
-        fi
-    done
+    # Build for armeabi-v7a
+    info "  编译 armeabi-v7a..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w" -o ../bin/armeabi-v7a/clipserver ./cmd/clipserver
+    if [ $? -eq 0 ]; then
+        info "  ✓ armeabi-v7a 编译成功"
+    else
+        error "  ✗ armeabi-v7a 编译失败"
+    fi
     
-    cd ../SyncClipboard-magisk
+    # Build for x86_64
+    info "  编译 x86_64..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../bin/x86_64/clipserver ./cmd/clipserver
+    if [ $? -eq 0 ]; then
+        info "  ✓ x86_64 编译成功"
+    else
+        error "  ✗ x86_64 编译失败"
+    fi
+    
+    # Build for x86
+    info "  编译 x86..."
+    CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -ldflags="-s -w" -o ../bin/x86/clipserver ./cmd/clipserver
+    if [ $? -eq 0 ]; then
+        info "  ✓ x86 编译成功"
+    else
+        error "  ✗ x86 编译失败"
+    fi
+    
+    cd ..
 else
     info "[3/6] 跳过二进制编译（使用现有文件）"
     
@@ -157,9 +171,12 @@ FILES=(
     "META-INF"
     "bin"
     "webui"
+    "config"
     "module.prop"
     "customize.sh"
     "service.sh"
+    "post-fs-data.sh"
+    "sepolicy.rule"
     "uninstall.sh"
     "README.md"
 )
