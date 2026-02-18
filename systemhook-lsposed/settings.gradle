@@ -1,6 +1,3 @@
-rootProject.name = "syncclipboard-systemhook"
-include ':app'
-
 pluginManagement {
     repositories {
         google()
@@ -8,6 +5,9 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+rootProject.name = "syncclipboard-systemhook"
+include ':app'
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
