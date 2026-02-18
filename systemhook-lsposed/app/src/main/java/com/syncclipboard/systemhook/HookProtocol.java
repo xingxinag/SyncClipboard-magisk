@@ -15,6 +15,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class HookProtocol {
@@ -25,6 +26,7 @@ final class HookProtocol {
     private static final File ACK_FILE = new File(HOOK_DIR, "clipboard_ack.json");
 
     private static final AtomicReference<String> LAST_REQUEST_ID = new AtomicReference<>("");
+    private static final AtomicBoolean APPLYING_COMMAND = new AtomicBoolean(false);
 
     private HookProtocol() {
     }
@@ -60,6 +62,10 @@ final class HookProtocol {
 
     static void processPendingCommand(Object clipboardServiceInstance) {
         try {
+            if (APPLYING_COMMAND.get()) {
+                return;
+            }
+
             ensureDir();
             if (!COMMAND_FILE.exists()) {
                 return;
@@ -92,7 +98,13 @@ final class HookProtocol {
     }
 
     private static void applySetCommand(Object clipboardServiceInstance, String content, String requestId) {
+        if (!APPLYING_COMMAND.compareAndSet(false, true)) {
+            return;
+        }
         try {
+            // Mark request as handled first to prevent recursive re-entry
+            LAST_REQUEST_ID.set(requestId);
+
             Object contextObj = de.robv.android.xposed.XposedHelpers.getObjectField(clipboardServiceInstance, "mContext");
             if (!(contextObj instanceof Context)) {
                 writeAck(requestId, "error", "missing service context");
@@ -111,9 +123,12 @@ final class HookProtocol {
 
             writeState(content == null ? "" : content);
             writeAck(requestId, "ok", "");
-            LAST_REQUEST_ID.set(requestId);
+            //noinspection ResultOfMethodCallIgnored
+            COMMAND_FILE.delete();
         } catch (Throwable t) {
             writeAck(requestId, "error", String.valueOf(t));
+        } finally {
+            APPLYING_COMMAND.set(false);
         }
     }
 
