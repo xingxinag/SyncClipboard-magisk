@@ -4,7 +4,7 @@
 
 MODDIR=${0%/*}
 CONFIG_DIR="/data/adb/syncclipboard"
-HOOK_DIR="$CONFIG_DIR/hook"
+HOOK_DIR="/data/system/syncclipboard_hook"
 
 # 创建配置目录
 mkdir -p "$CONFIG_DIR"
@@ -12,7 +12,8 @@ chmod 755 "$CONFIG_DIR"
 
 # 创建 system hook 协议目录
 mkdir -p "$HOOK_DIR"
-chmod 775 "$HOOK_DIR"
+chown 1000:1000 "$HOOK_DIR" 2>/dev/null || true
+chmod 0770 "$HOOK_DIR"
 
 # 创建 WebUI 目录的符号链接（如果需要）
 if [ ! -d "$CONFIG_DIR/webui" ]; then

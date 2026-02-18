@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const hookBaseDir = "/data/adb/syncclipboard/hook"
+const hookBaseDir = "/data/system/syncclipboard_hook"
 
 var (
 	hookStatePath    = filepath.Join(hookBaseDir, "clipboard_state.json")

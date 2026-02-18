@@ -4,6 +4,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 
+import de.robv.android.xposed.XposedBridge;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -16,7 +18,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class HookProtocol {
-    private static final File HOOK_DIR = new File("/data/adb/syncclipboard/hook");
+    private static final File HOOK_DIR = new File("/data/system/syncclipboard_hook");
     private static final File EVENT_FILE = new File(HOOK_DIR, "hook_events.log");
     private static final File STATE_FILE = new File(HOOK_DIR, "clipboard_state.json");
     private static final File COMMAND_FILE = new File(HOOK_DIR, "clipboard_command.json");
@@ -35,6 +37,7 @@ final class HookProtocol {
             payload.put("timestamp", System.currentTimeMillis() / 1000);
             writeAtomic(STATE_FILE, payload.toString());
         } catch (Throwable ignored) {
+            XposedBridge.log("[SyncClipboardHook] writeState failed: " + ignored);
         }
     }
 
@@ -51,6 +54,7 @@ final class HookProtocol {
                 fos.write('\n');
             }
         } catch (Throwable ignored) {
+            XposedBridge.log("[SyncClipboardHook] recordEvent failed: " + ignored);
         }
     }
 
@@ -83,6 +87,7 @@ final class HookProtocol {
                 applySetCommand(clipboardServiceInstance, content, requestId);
             }
         } catch (Throwable ignored) {
+            XposedBridge.log("[SyncClipboardHook] processPendingCommand failed: " + ignored);
         }
     }
 
@@ -121,6 +126,7 @@ final class HookProtocol {
             ack.put("timestamp", System.currentTimeMillis() / 1000);
             writeAtomic(ACK_FILE, ack.toString());
         } catch (Throwable ignored) {
+            XposedBridge.log("[SyncClipboardHook] writeAck failed: " + ignored);
         }
     }
 
