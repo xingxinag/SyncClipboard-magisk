@@ -1,7 +1,7 @@
 id=syncclipboard
 name=SyncClipboard
-version=2.5.0
-versionCode=20500
+version=2.6.0
+versionCode=20600
 author=xingxinag (小星虎)
-description=跨设备剪贴板同步模块 - 通过 WebDAV 同步剪贴板内容。支持 Magisk/KernelSU/APatch，内置 WebUI 配置界面。v2.5.0: 强制clean构建+清单校验+Helper版本升级，根治桥接包陈旧/权限残留问题。
+description=跨设备剪贴板同步模块 - 通过 WebDAV 同步剪贴板内容。支持 Magisk/KernelSU/APatch，内置 WebUI 配置界面。v2.6.0: 切换到 system_server Hook 主路线（LSPosed+Zygisk），移除 helper 主路径依赖。
 updateJson=https://github.com/xingxinag/SyncClipboard-magisk/raw/main/update.json

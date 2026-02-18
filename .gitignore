@@ -40,3 +40,5 @@ Thumbs.db
 # Development files
 docs/plans/
 项目总体大纲.txt
+
+.worktrees/
