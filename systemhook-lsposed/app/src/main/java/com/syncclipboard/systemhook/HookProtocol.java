@@ -165,9 +165,14 @@ final class HookProtocol {
 
         Object[] invokeArgs = Arrays.copyOf(template.args, template.args.length);
         invokeArgs[template.clipArgIndex] = ClipData.newPlainText("text", content);
-        candidate.setAccessible(true);
-        candidate.invoke(clipboardServiceInstance, invokeArgs);
-        return true;
+        try {
+            candidate.setAccessible(true);
+            candidate.invoke(clipboardServiceInstance, invokeArgs);
+            return true;
+        } catch (Throwable t) {
+            XposedBridge.log("[SyncClipboardHook] template invoke failed: " + t);
+            return false;
+        }
     }
 
     private static Method findCompatibleSetMethod(Class<?> serviceClass, SetInvocationTemplate template) {

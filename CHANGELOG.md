@@ -2,6 +2,12 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.7] - 2026-02-18
+
+### Fixed
+- Fixed CI compile failure in `HookProtocol.applyWithCapturedTemplate`: reflective `Method.invoke(...)` checked exceptions are now handled inside the method.
+- When template invocation fails at runtime, the hook now logs the failure and safely falls back to the ClipboardManager path instead of crashing compile/runtime flow.
+
 ## [2.6.6] - 2026-02-18
 
 ### Fixed
