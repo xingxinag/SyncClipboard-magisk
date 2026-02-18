@@ -132,6 +132,10 @@ func (m *Manager) syncUpload() {
 
 // syncUploadWithContent 使用指定内容上传到 WebDAV
 func (m *Manager) syncUploadWithContent(content string) {
+	if m.webdavClient == nil {
+		return
+	}
+
 	// 创建 SyncClipboard 数据结构
 	clipData := syncdata.NewTextClipboard(content)
 
@@ -147,9 +151,7 @@ func (m *Manager) syncUploadWithContent(content string) {
 		return
 	}
 
-	m.lastHash = clipData.GetHash()
-	atomic.AddInt64(&m.syncCount, 1)
-	atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
+	m.recordSync(clipData.GetHash())
 	log.Printf("Uploaded clipboard to WebDAV (hash: %s, size: %d bytes)", clipData.GetHash()[:8], clipData.Size)
 }
 
@@ -181,14 +183,12 @@ func (m *Manager) syncDownload() {
 		return
 	}
 
-	m.lastHash = clipData.GetHash()
-	atomic.AddInt64(&m.syncCount, 1)
-	atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
+	m.recordSync(clipData.GetHash())
 	log.Printf("Downloaded clipboard from WebDAV (hash: %s, size: %d bytes)", clipData.GetHash()[:8], clipData.Size)
 }
 
-// SyncNow 立即执行同步（上传）
-func (m *Manager) SyncNow() error {
+// UploadNow 手动上传本地剪贴板到 WebDAV
+func (m *Manager) UploadNow() error {
 	if m.webdavClient == nil {
 		return webdav.ErrNotConfigured
 	}
@@ -199,34 +199,49 @@ func (m *Manager) SyncNow() error {
 	}
 
 	localData := syncdata.NewTextClipboard(content)
-
-	remoteData, downloadErr := m.webdavClient.DownloadClipboard()
-	if downloadErr == nil && remoteData != nil && remoteData.IsText() {
-		if remoteData.GetHash() != localData.GetHash() {
-			if err := clipboardSetFn(remoteData.GetText()); err != nil {
-				return err
-			}
-			m.lastHash = remoteData.GetHash()
-			atomic.AddInt64(&m.syncCount, 1)
-			atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
-			log.Printf("Manual sync pulled from WebDAV (hash: %s, size: %d bytes)", remoteData.GetHash()[:8], remoteData.Size)
-			return nil
-		}
-	}
-
 	err = m.webdavClient.UploadClipboard(localData)
 	if err != nil {
-		if downloadErr != nil {
-			return downloadErr
-		}
 		return err
 	}
 
-	m.lastHash = localData.GetHash()
+	m.recordSync(localData.GetHash())
+	log.Printf("Manual upload pushed to WebDAV (hash: %s, size: %d bytes)", localData.GetHash()[:8], localData.Size)
+	return nil
+}
+
+// DownloadNow 手动从 WebDAV 拉取到本地剪贴板
+func (m *Manager) DownloadNow() error {
+	if m.webdavClient == nil {
+		return webdav.ErrNotConfigured
+	}
+
+	remoteData, err := m.webdavClient.DownloadClipboard()
+	if err != nil {
+		return err
+	}
+
+	if remoteData == nil || !remoteData.IsText() {
+		return nil
+	}
+
+	if err := clipboardSetFn(remoteData.GetText()); err != nil {
+		return err
+	}
+
+	m.recordSync(remoteData.GetHash())
+	log.Printf("Manual download pulled from WebDAV (hash: %s, size: %d bytes)", remoteData.GetHash()[:8], remoteData.Size)
+	return nil
+}
+
+// SyncNow 兼容旧接口，默认执行手动上传
+func (m *Manager) SyncNow() error {
+	return m.UploadNow()
+}
+
+func (m *Manager) recordSync(hash string) {
+	m.lastHash = hash
 	atomic.AddInt64(&m.syncCount, 1)
 	atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
-	log.Printf("Manual sync pushed to WebDAV (hash: %s, size: %d bytes)", localData.GetHash()[:8], localData.Size)
-	return nil
 }
 
 // IsRunning 返回同步状态

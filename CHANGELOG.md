@@ -2,6 +2,16 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.8] - 2026-02-18
+
+### Fixed
+- Fixed manual upload path reliability by making `POST /api/sync/now` upload local clipboard content to WebDAV by default (manual-first behavior).
+- Added explicit manual pull API `POST /api/sync/pull` so download is available when needed without overriding local clipboard during upload tests.
+- Updated Web UI action buttons to match behavior: `立即上传` (default) and optional `拉取远端`.
+
+### Changed
+- Kept auto sync optional via existing `enabled` setting, while manual operation is now the default interaction path.
+
 ## [2.6.7] - 2026-02-18
 
 ### Fixed

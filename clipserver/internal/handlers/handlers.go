@@ -184,11 +184,25 @@ func (h *Handler) SyncNowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.syncManager.SyncNow(); err != nil {
+	if err := h.syncManager.UploadNow(); err != nil {
 		h.writeError(w, "sync_now", http.StatusInternalServerError, err, nil)
 		return
 	}
-	h.writeOK(w, "sync_now", "同步完成", nil)
+	h.writeOK(w, "sync_now", "上传完成", nil)
+}
+
+// SyncPullHandler 手动从 WebDAV 拉取
+func (h *Handler) SyncPullHandler(w http.ResponseWriter, r *http.Request) {
+	if h.syncManager == nil {
+		h.writeError(w, "sync_pull", http.StatusInternalServerError, fmt.Errorf("sync manager not initialized"), nil)
+		return
+	}
+
+	if err := h.syncManager.DownloadNow(); err != nil {
+		h.writeError(w, "sync_pull", http.StatusInternalServerError, err, nil)
+		return
+	}
+	h.writeOK(w, "sync_pull", "下载完成", nil)
 }
 
 // GetSyncStatusHandler 获取同步状态

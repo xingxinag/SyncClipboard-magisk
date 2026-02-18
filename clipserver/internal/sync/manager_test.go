@@ -6,6 +6,7 @@ import (
 
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/config"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/syncdata"
+	"github.com/yourusername/syncclipboard-android/clipserver/internal/webdav"
 )
 
 type fakeSyncClient struct {
@@ -41,64 +42,8 @@ func withClipboardStubs(t *testing.T, getFn func() (string, error), setFn func(s
 	})
 }
 
-func TestSyncNowPullsRemoteWhenDifferent(t *testing.T) {
-	client := &fakeSyncClient{downloadData: syncdata.NewTextClipboard("REMOTE_TEXT")}
-	m := NewManager(&config.Config{}, client)
-
-	var setValue string
-	withClipboardStubs(t,
-		func() (string, error) { return "LOCAL_TEXT", nil },
-		func(content string) error {
-			setValue = content
-			return nil
-		},
-	)
-
-	if err := m.SyncNow(); err != nil {
-		t.Fatalf("SyncNow returned error: %v", err)
-	}
-
-	if setValue != "REMOTE_TEXT" {
-		t.Fatalf("expected clipboard set to REMOTE_TEXT, got %q", setValue)
-	}
-	if client.uploadCalled {
-		t.Fatalf("expected no upload when remote differs")
-	}
-	if m.lastHash != syncdata.NewTextClipboard("REMOTE_TEXT").GetHash() {
-		t.Fatalf("expected lastHash to track remote hash")
-	}
-}
-
-func TestSyncNowPushesWhenRemoteSame(t *testing.T) {
-	client := &fakeSyncClient{downloadData: syncdata.NewTextClipboard("LOCAL_TEXT")}
-	m := NewManager(&config.Config{}, client)
-
-	setCalled := false
-	withClipboardStubs(t,
-		func() (string, error) { return "LOCAL_TEXT", nil },
-		func(content string) error {
-			setCalled = true
-			return nil
-		},
-	)
-
-	if err := m.SyncNow(); err != nil {
-		t.Fatalf("SyncNow returned error: %v", err)
-	}
-
-	if setCalled {
-		t.Fatalf("expected clipboard set not called when remote same")
-	}
-	if !client.uploadCalled {
-		t.Fatalf("expected upload when remote same")
-	}
-	if client.uploadPayload == nil || client.uploadPayload.GetText() != "LOCAL_TEXT" {
-		t.Fatalf("expected LOCAL_TEXT upload payload")
-	}
-}
-
-func TestSyncNowPushesWhenDownloadFails(t *testing.T) {
-	client := &fakeSyncClient{downloadErr: errors.New("download failed")}
+func TestSyncNowUploadsLocalClipboard(t *testing.T) {
+	client := &fakeSyncClient{}
 	m := NewManager(&config.Config{}, client)
 
 	withClipboardStubs(t,
@@ -109,7 +54,44 @@ func TestSyncNowPushesWhenDownloadFails(t *testing.T) {
 	if err := m.SyncNow(); err != nil {
 		t.Fatalf("SyncNow returned error: %v", err)
 	}
+
 	if !client.uploadCalled {
-		t.Fatalf("expected upload when download fails")
+		t.Fatalf("expected upload in SyncNow")
+	}
+	if client.uploadPayload == nil || client.uploadPayload.GetText() != "LOCAL_TEXT" {
+		t.Fatalf("expected LOCAL_TEXT upload payload")
+	}
+}
+
+func TestUploadNowReturnsNotConfiguredWithoutClient(t *testing.T) {
+	m := NewManager(&config.Config{}, nil)
+
+	if err := m.UploadNow(); !errors.Is(err, webdav.ErrNotConfigured) {
+		t.Fatalf("expected ErrNotConfigured, got %v", err)
+	}
+}
+
+func TestDownloadNowWritesRemoteClipboard(t *testing.T) {
+	client := &fakeSyncClient{downloadData: syncdata.NewTextClipboard("REMOTE_TEXT")}
+	m := NewManager(&config.Config{}, client)
+	var setValue string
+
+	withClipboardStubs(t,
+		func() (string, error) { return "IGNORED", nil },
+		func(content string) error {
+			setValue = content
+			return nil
+		},
+	)
+
+	if err := m.DownloadNow(); err != nil {
+		t.Fatalf("DownloadNow returned error: %v", err)
+	}
+
+	if setValue != "REMOTE_TEXT" {
+		t.Fatalf("expected clipboard set to REMOTE_TEXT, got %q", setValue)
+	}
+	if client.uploadCalled {
+		t.Fatalf("download should not trigger upload")
 	}
 }

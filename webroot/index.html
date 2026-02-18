@@ -461,7 +461,8 @@
             </div>
             <div class="button-group">
                 <button class="btn btn-small" onclick="refreshClipboard(event)" data-i18n="refresh">刷新</button>
-                <button class="btn btn-small" onclick="syncNow(event)" data-i18n="syncNow">立即同步</button>
+                <button class="btn btn-small" onclick="syncNow(event)" data-i18n="syncNow">立即上传</button>
+                <button class="btn btn-small" onclick="pullNow(event)" data-i18n="pullNow">拉取远端</button>
             </div>
         </div>
         
@@ -543,7 +544,8 @@
                 clipboardTitle: '📋 当前剪贴板',
                 loading: '正在加载...',
                 refresh: '刷新',
-                syncNow: '立即同步',
+                syncNow: '立即上传',
+                pullNow: '拉取远端',
                 accountsTitle: '👥 账号管理',
                 noAccounts: '暂无账号，请添加',
                 addAccount: '添加账号',
@@ -566,7 +568,8 @@
                 enableSync: '启用自动同步',
                 enabled: '启用',
                 disabled: '禁用',
-                syncSuccess: '同步完成！',
+                syncSuccess: '上传完成！',
+                pullSuccess: '下载完成！',
                 syncFailed: '同步失败',
                 saveSuccess: '配置已保存！',
                 saveFailed: '保存失败',
@@ -592,7 +595,8 @@
                 clipboardTitle: '📋 Current Clipboard',
                 loading: 'Loading...',
                 refresh: 'Refresh',
-                syncNow: 'Sync Now',
+                syncNow: 'Upload Now',
+                pullNow: 'Pull Remote',
                 accountsTitle: '👥 Account Management',
                 noAccounts: 'No accounts, please add',
                 addAccount: 'Add Account',
@@ -615,7 +619,8 @@
                 enableSync: 'Enable Auto Sync',
                 enabled: 'Enabled',
                 disabled: 'Disabled',
-                syncSuccess: 'Sync completed!',
+                syncSuccess: 'Upload completed!',
+                pullSuccess: 'Download completed!',
                 syncFailed: 'Sync failed',
                 saveSuccess: 'Config saved!',
                 saveFailed: 'Save failed',
@@ -1384,19 +1389,43 @@
             
             try {
                 btn.disabled = true;
-                btn.innerHTML = '<span class="loading"></span> 同步中...';
+                btn.innerHTML = '<span class="loading"></span> 上传中...';
                 
-                showToast('⚡ 正在执行同步...', '上传本地剪贴板到 WebDAV\n下载远程剪贴板到本地', 'info');
+                showToast('⚡ 正在上传...', '将当前本地剪贴板上传到 WebDAV', 'info');
                 
                 await apiRequest('sync_now', '/api/sync/now', { method: 'POST' });
                 
-                showToast('✓ 同步完成', '本地和远程剪贴板已同步\n剪贴板内容已更新', 'success');
+                showToast('✓ 上传完成', '本地剪贴板已上传到 WebDAV', 'success');
                 
                 // 刷新剪贴板显示
                 await refreshClipboard();
             } catch (err) {
                 console.error('Sync error:', err);
                 showToast('✗ 同步失败', formatApiError(err), 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        async function pullNow(evt) {
+            if (!evt) return;
+            const btn = evt.target;
+            const originalText = btn.textContent;
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> 拉取中...';
+
+                showToast('⚡ 正在拉取...', '从 WebDAV 下载最新剪贴板到本机', 'info');
+
+                await apiRequest('sync_pull', '/api/sync/pull', { method: 'POST' });
+
+                showToast('✓ 拉取完成', '远端剪贴板已更新到本机', 'success');
+                await refreshClipboard();
+            } catch (err) {
+                console.error('Pull error:', err);
+                showToast('✗ 拉取失败', formatApiError(err), 'error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
