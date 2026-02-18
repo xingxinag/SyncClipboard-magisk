@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,6 +44,9 @@ type hookAckPayload struct {
 func getClipboardSystemHook() (string, error) {
 	data, err := os.ReadFile(hookStatePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("system hook state not available: %w (LSPosed module likely not enabled for android/system_server)", err)
+		}
 		return "", fmt.Errorf("system hook state not available: %w", err)
 	}
 
@@ -103,5 +107,18 @@ func setClipboardSystemHook(content string) error {
 		time.Sleep(hookPollInterval)
 	}
 
-	return errors.New("system hook set timeout")
+	if !isSystemHookModuleInstalled() {
+		return errors.New("system hook set timeout (system hook module package missing)")
+	}
+
+	return errors.New("system hook set timeout (LSPosed scope for android/system_server may be disabled)")
+}
+
+func isSystemHookModuleInstalled() bool {
+	cmd := exec.Command("su", "-c", "pm path com.syncclipboard.systemhook")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
 }
