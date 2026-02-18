@@ -76,13 +76,15 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"service_status":    "running",
-		"auto_sync_enabled": cfg.Enabled,
-		"sync_running":      syncRunning,
-		"sync_count":        syncCount,
-		"last_sync_unix":    lastSyncUnix,
-		"account_count":     accountCount,
-		"webdav_configured": webdavConfigured,
+		"service_status":        "running",
+		"auto_sync_enabled":     cfg.Enabled,
+		"auto_upload_enabled":   cfg.AutoUploadEnabled,
+		"auto_download_enabled": cfg.AutoDownloadEnabled,
+		"sync_running":          syncRunning,
+		"sync_count":            syncCount,
+		"last_sync_unix":        lastSyncUnix,
+		"account_count":         accountCount,
+		"webdav_configured":     webdavConfigured,
 		"active_account_name": func() string {
 			if activeAccount != nil {
 				return activeAccount.Name
@@ -138,6 +140,8 @@ func (h *Handler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 		cfg.SyncInterval = 3600
 	}
 
+	cfg.Enabled = cfg.AutoUploadEnabled || cfg.AutoDownloadEnabled
+
 	if err := config.SaveConfig(h.configPath, &cfg); err != nil {
 		h.writeError(w, "update_config", http.StatusInternalServerError, err, nil)
 		return
@@ -161,8 +165,10 @@ func (h *Handler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.writeOK(w, "update_config", "配置已保存", map[string]interface{}{
-		"sync_interval": cfg.SyncInterval,
-		"enabled":       cfg.Enabled,
+		"sync_interval":         cfg.SyncInterval,
+		"enabled":               cfg.Enabled,
+		"auto_upload_enabled":   cfg.AutoUploadEnabled,
+		"auto_download_enabled": cfg.AutoDownloadEnabled,
 	})
 }
 

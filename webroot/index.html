@@ -439,7 +439,7 @@
                     <div class="status-value" id="syncCount">0</div>
                 </div>
                 <div class="status-item">
-                    <div class="status-label" data-i18n="autoSync">自动同步</div>
+                    <div class="status-label" data-i18n="autoSync">自动策略</div>
                     <div class="status-value" id="autoSyncStatus">--</div>
                 </div>
             </div>
@@ -518,8 +518,15 @@
                 <input type="number" id="syncInterval" value="60" min="1" max="3600">
             </div>
             <div class="form-group">
-                <label data-i18n="enableSync">启用自动同步</label>
-                <select id="enableSync">
+                <label data-i18n="enableAutoUpload">自动上传（本地->WebDAV）</label>
+                <select id="enableAutoUpload">
+                    <option value="true" data-i18n="enabled">启用</option>
+                    <option value="false" data-i18n="disabled">禁用</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="enableAutoDownload">自动拉取（WebDAV->本地）</label>
+                <select id="enableAutoDownload">
                     <option value="true" data-i18n="enabled">启用</option>
                     <option value="false" data-i18n="disabled">禁用</option>
                 </select>
@@ -540,7 +547,7 @@
                 running: '运行中',
                 lastSync: '最后同步',
                 syncCount: '已同步',
-                autoSync: '自动同步',
+                autoSync: '自动策略',
                 clipboardTitle: '📋 当前剪贴板',
                 loading: '正在加载...',
                 refresh: '刷新',
@@ -565,7 +572,8 @@
                 monitorStatus: '监听状态',
                 monitoring: '实时监听中',
                 syncInterval: '同步间隔（秒，范围：1-3600）',
-                enableSync: '启用自动同步',
+                enableAutoUpload: '自动上传（本地->WebDAV）',
+                enableAutoDownload: '自动拉取（WebDAV->本地）',
                 enabled: '启用',
                 disabled: '禁用',
                 syncSuccess: '上传完成！',
@@ -591,7 +599,7 @@
                 running: 'Running',
                 lastSync: 'Last Sync',
                 syncCount: 'Synced',
-                autoSync: 'Auto Sync',
+                autoSync: 'Auto Mode',
                 clipboardTitle: '📋 Current Clipboard',
                 loading: 'Loading...',
                 refresh: 'Refresh',
@@ -616,7 +624,8 @@
                 monitorStatus: 'Monitor Status',
                 monitoring: 'Real-time Monitoring',
                 syncInterval: 'Sync Interval (seconds, 1-3600)',
-                enableSync: 'Enable Auto Sync',
+                enableAutoUpload: 'Auto Upload (local -> WebDAV)',
+                enableAutoDownload: 'Auto Pull (WebDAV -> local)',
                 enabled: 'Enabled',
                 disabled: 'Disabled',
                 syncSuccess: 'Upload completed!',
@@ -1007,10 +1016,12 @@
                 renderAccountList(config);
                 
                 // 同步设置
+                const autoUploadEnabled = !!config.auto_upload_enabled;
+                const autoDownloadEnabled = !!config.auto_download_enabled;
                 document.getElementById('syncInterval').value = config.sync_interval || 60;
-                document.getElementById('enableSync').value = config.enabled ? 'true' : 'false';
-                document.getElementById('autoSyncStatus').textContent = config.enabled ? 
-                    i18n[currentLang].enabled : i18n[currentLang].disabled;
+                document.getElementById('enableAutoUpload').value = autoUploadEnabled ? 'true' : 'false';
+                document.getElementById('enableAutoDownload').value = autoDownloadEnabled ? 'true' : 'false';
+                document.getElementById('autoSyncStatus').textContent = `${autoUploadEnabled ? i18n[currentLang].enabled : i18n[currentLang].disabled}/${autoDownloadEnabled ? i18n[currentLang].enabled : i18n[currentLang].disabled}`;
                 
                 console.log('=== Load Config Success ===');
                 await refreshStatus();
@@ -1030,7 +1041,9 @@
                 const lastEl = document.getElementById('lastSync');
 
                 serviceEl.textContent = status.service_status === 'running' ? i18n[currentLang].running : i18n[currentLang].disabled;
-                autoEl.textContent = status.auto_sync_enabled ? i18n[currentLang].enabled : i18n[currentLang].disabled;
+                const autoUploadEnabled = !!status.auto_upload_enabled;
+                const autoDownloadEnabled = !!status.auto_download_enabled;
+                autoEl.textContent = `${autoUploadEnabled ? i18n[currentLang].enabled : i18n[currentLang].disabled}/${autoDownloadEnabled ? i18n[currentLang].enabled : i18n[currentLang].disabled}`;
                 countEl.textContent = String(status.sync_count || 0);
 
                 if (status.last_sync_unix && status.last_sync_unix > 0) {
@@ -1120,12 +1133,15 @@
                 const { data: currentConfig } = await apiRequest('load_config_before_save', '/api/config');
                 
                 const newSyncInterval = parseInt(document.getElementById('syncInterval').value) || 60;
-                const newEnabled = document.getElementById('enableSync').value === 'true';
+                const newAutoUpload = document.getElementById('enableAutoUpload').value === 'true';
+                const newAutoDownload = document.getElementById('enableAutoDownload').value === 'true';
                 
                 const config = {
                     ...currentConfig,
                     sync_interval: newSyncInterval,
-                    enabled: newEnabled
+                    enabled: (newAutoUpload || newAutoDownload),
+                    auto_upload_enabled: newAutoUpload,
+                    auto_download_enabled: newAutoDownload
                 };
                 
                 // 验证间隔范围
@@ -1154,7 +1170,8 @@
                     detailMessage += `• 激活账号：${activeAccount.name}\n`;
                 }
                 detailMessage += `• 同步间隔：${config.sync_interval} 秒\n`;
-                detailMessage += `• 自动同步：${config.enabled ? '已启用' : '已禁用'}\n`;
+                detailMessage += `• 自动上传：${config.auto_upload_enabled ? '已启用' : '已禁用'}\n`;
+                detailMessage += `• 自动拉取：${config.auto_download_enabled ? '已启用' : '已禁用'}\n`;
                 detailMessage += `• 实时监听：已启用（100%可靠）`;
                 
                 showToast('✓ 配置保存成功', detailMessage, 'success');

@@ -2,6 +2,16 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.9] - 2026-02-18
+
+### Changed
+- Added two explicit auto-sync switches in config/Web UI: `auto_upload_enabled` and `auto_download_enabled`.
+- Set both auto switches default to disabled (manual-first by default).
+- `POST /api/sync/now` remains manual upload; `POST /api/sync/pull` remains optional manual pull.
+
+### Fixed
+- Fixed mixed upload/pull behavior in auto mode by splitting monitor upload and ticker download paths according to independent switches.
+
 ## [2.6.8] - 2026-02-18
 
 ### Fixed

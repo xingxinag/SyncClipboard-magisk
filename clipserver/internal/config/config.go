@@ -24,8 +24,10 @@ type Config struct {
 	ActiveAccountID string          `json:"active_account_id"` // 当前激活的账号 ID
 
 	// 通用配置
-	SyncInterval int  `json:"sync_interval"` // 秒（1-3600）
-	Enabled      bool `json:"enabled"`       // 是否启用自动同步
+	SyncInterval        int  `json:"sync_interval"`         // 秒（1-3600）
+	Enabled             bool `json:"enabled"`               // 兼容旧字段
+	AutoUploadEnabled   bool `json:"auto_upload_enabled"`   // 自动上传开关
+	AutoDownloadEnabled bool `json:"auto_download_enabled"` // 自动拉取开关
 
 	// 剪贴板策略（自动探测并持久化）
 	ClipboardStrategy ClipboardStrategyConfig `json:"clipboard_strategy"`
@@ -51,11 +53,15 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	config.NormalizeSyncMode()
+
 	return &config, nil
 }
 
 // SaveConfig 保存配置到指定路径
 func SaveConfig(path string, config *Config) error {
+	config.NormalizeSyncMode()
+
 	// 确保目录存在
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -73,14 +79,21 @@ func SaveConfig(path string, config *Config) error {
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Accounts:        []WebDAVAccount{},
-		ActiveAccountID: "",
-		SyncInterval:    60,
-		Enabled:         false,
+		Accounts:            []WebDAVAccount{},
+		ActiveAccountID:     "",
+		SyncInterval:        60,
+		Enabled:             false,
+		AutoUploadEnabled:   false,
+		AutoDownloadEnabled: false,
 		ClipboardStrategy: ClipboardStrategyConfig{
 			Enabled: true,
 		},
 	}
+}
+
+// NormalizeSyncMode 兼容旧字段并统一新开关状态
+func (c *Config) NormalizeSyncMode() {
+	c.Enabled = c.AutoUploadEnabled || c.AutoDownloadEnabled
 }
 
 // GetActiveAccount 获取当前激活的账号

@@ -57,14 +57,23 @@ func (m *Manager) Start() {
 		return
 	}
 
+	if !m.config.AutoUploadEnabled && !m.config.AutoDownloadEnabled {
+		log.Println("Both auto upload and auto download are disabled")
+		return
+	}
+
 	if m.webdavClient == nil {
 		log.Println("WebDAV client not configured")
 		return
 	}
 
 	m.running = true
-	interval := time.Duration(m.config.SyncInterval) * time.Second
-	m.ticker = time.NewTicker(interval)
+	var tickerC <-chan time.Time
+	if m.config.AutoDownloadEnabled {
+		interval := time.Duration(m.config.SyncInterval) * time.Second
+		m.ticker = time.NewTicker(interval)
+		tickerC = m.ticker.C
+	}
 
 	// 创建混合监听器（自动降级，确保 100% 可靠）
 	m.monitor = monitor.NewHybridMonitor()
@@ -72,22 +81,26 @@ func (m *Manager) Start() {
 	log.Printf("Starting auto-sync with interval: %d seconds", m.config.SyncInterval)
 	log.Println("Starting clipboard monitor for real-time sync")
 
-	// 启动监听器，传入回调函数
-	if err := m.monitor.Start(func(content string) {
-		// 剪贴板变化时立即触发上传
-		m.syncUploadWithContent(content)
-	}); err != nil {
-		log.Printf("Failed to start clipboard monitor: %v", err)
-		// 监听器启动失败不影响定时同步
+	if m.config.AutoUploadEnabled {
+		// 启动监听器，传入回调函数
+		if err := m.monitor.Start(func(content string) {
+			// 剪贴板变化时立即触发上传
+			m.syncUploadWithContent(content)
+		}); err != nil {
+			log.Printf("Failed to start clipboard monitor: %v", err)
+			// 监听器启动失败不影响定时同步
+		}
 	}
 
 	go func() {
 		// 启动时先执行一次下载同步
-		m.syncDownload()
+		if m.config.AutoDownloadEnabled {
+			m.syncDownload()
+		}
 
 		for {
 			select {
-			case <-m.ticker.C:
+			case <-tickerC:
 				// 定时下载检查（上传由 monitor 触发）
 				m.syncDownload()
 			case <-m.stopChan:
