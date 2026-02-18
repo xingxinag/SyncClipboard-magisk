@@ -69,6 +69,7 @@ public class ClipboardHookEntry implements IXposedHookLoadPackage {
                 protected void beforeHookedMethod(MethodHookParam param) {
                     SERVICE_REF.set(param.thisObject);
                     HookProtocol.recordEvent("set_hook:" + name);
+                    HookProtocol.captureSetInvocation(name, param.args);
                     ClipData data = extractClipDataFromArgs(param.args);
                     if (data != null) {
                         HookProtocol.writeState(readClipText(data));

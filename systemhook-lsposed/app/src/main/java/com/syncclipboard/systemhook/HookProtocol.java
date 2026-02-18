@@ -12,9 +12,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,6 +29,7 @@ final class HookProtocol {
 
     private static final AtomicReference<String> LAST_REQUEST_ID = new AtomicReference<>("");
     private static final AtomicBoolean APPLYING_COMMAND = new AtomicBoolean(false);
+    private static final AtomicReference<SetInvocationTemplate> LAST_SET_TEMPLATE = new AtomicReference<>(null);
 
     private HookProtocol() {
     }
@@ -97,6 +100,33 @@ final class HookProtocol {
         }
     }
 
+    static boolean isApplyingCommand() {
+        return APPLYING_COMMAND.get();
+    }
+
+    static void captureSetInvocation(String methodName, Object[] args) {
+        if (APPLYING_COMMAND.get()) {
+            return;
+        }
+        if (methodName == null || methodName.isEmpty() || args == null || args.length == 0) {
+            return;
+        }
+
+        int clipArgIndex = -1;
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] instanceof ClipData) {
+                clipArgIndex = i;
+                break;
+            }
+        }
+        if (clipArgIndex < 0) {
+            return;
+        }
+
+        Object[] copied = Arrays.copyOf(args, args.length);
+        LAST_SET_TEMPLATE.set(new SetInvocationTemplate(methodName, copied, clipArgIndex));
+    }
+
     private static void applySetCommand(Object clipboardServiceInstance, String content, String requestId) {
         if (!APPLYING_COMMAND.compareAndSet(false, true)) {
             return;
@@ -105,23 +135,13 @@ final class HookProtocol {
             // Mark request as handled first to prevent recursive re-entry
             LAST_REQUEST_ID.set(requestId);
 
-            Object contextObj = de.robv.android.xposed.XposedHelpers.getObjectField(clipboardServiceInstance, "mContext");
-            if (!(contextObj instanceof Context)) {
-                writeAck(requestId, "error", "missing service context");
-                return;
+            String normalized = content == null ? "" : content;
+
+            boolean appliedViaTemplate = applyWithCapturedTemplate(clipboardServiceInstance, normalized);
+            if (!appliedViaTemplate) {
+                applyViaClipboardManager(clipboardServiceInstance, normalized);
             }
 
-            Context context = (Context) contextObj;
-            ClipboardManager manager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-            if (manager == null) {
-                writeAck(requestId, "error", "clipboard manager unavailable");
-                return;
-            }
-
-            ClipData data = ClipData.newPlainText("text", content == null ? "" : content);
-            manager.setPrimaryClip(data);
-
-            writeState(content == null ? "" : content);
             writeAck(requestId, "ok", "");
             //noinspection ResultOfMethodCallIgnored
             COMMAND_FILE.delete();
@@ -129,6 +149,73 @@ final class HookProtocol {
             writeAck(requestId, "error", String.valueOf(t));
         } finally {
             APPLYING_COMMAND.set(false);
+        }
+    }
+
+    private static boolean applyWithCapturedTemplate(Object clipboardServiceInstance, String content) {
+        SetInvocationTemplate template = LAST_SET_TEMPLATE.get();
+        if (template == null) {
+            return false;
+        }
+
+        Method candidate = findCompatibleSetMethod(clipboardServiceInstance.getClass(), template);
+        if (candidate == null) {
+            return false;
+        }
+
+        Object[] invokeArgs = Arrays.copyOf(template.args, template.args.length);
+        invokeArgs[template.clipArgIndex] = ClipData.newPlainText("text", content);
+        candidate.setAccessible(true);
+        candidate.invoke(clipboardServiceInstance, invokeArgs);
+        return true;
+    }
+
+    private static Method findCompatibleSetMethod(Class<?> serviceClass, SetInvocationTemplate template) {
+        Method[] methods = serviceClass.getDeclaredMethods();
+        for (Method method : methods) {
+            if (!template.methodName.equals(method.getName())) {
+                continue;
+            }
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            if (parameterTypes.length != template.args.length) {
+                continue;
+            }
+            if (template.clipArgIndex < 0 || template.clipArgIndex >= parameterTypes.length) {
+                continue;
+            }
+            if (!ClipData.class.isAssignableFrom(parameterTypes[template.clipArgIndex])) {
+                continue;
+            }
+            return method;
+        }
+        return null;
+    }
+
+    private static void applyViaClipboardManager(Object clipboardServiceInstance, String content) throws Exception {
+        Object contextObj = de.robv.android.xposed.XposedHelpers.getObjectField(clipboardServiceInstance, "mContext");
+        if (!(contextObj instanceof Context)) {
+            throw new IllegalStateException("missing service context");
+        }
+
+        Context context = (Context) contextObj;
+        ClipboardManager manager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (manager == null) {
+            throw new IllegalStateException("clipboard manager unavailable");
+        }
+
+        ClipData data = ClipData.newPlainText("text", content);
+        manager.setPrimaryClip(data);
+    }
+
+    private static final class SetInvocationTemplate {
+        final String methodName;
+        final Object[] args;
+        final int clipArgIndex;
+
+        SetInvocationTemplate(String methodName, Object[] args, int clipArgIndex) {
+            this.methodName = methodName;
+            this.args = args;
+            this.clipArgIndex = clipArgIndex;
         }
     }
 

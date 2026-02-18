@@ -2,6 +2,13 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.6] - 2026-02-18
+
+### Fixed
+- Fixed `system_hook` write path false-positive: command apply no longer relies on direct state-file overwrite to indicate success.
+- Captured real `ClipboardService` set invocation templates from live system calls and re-used them for command write-back, improving compatibility with ColorOS clipboard routing.
+- Added fallback path to `ClipboardManager` only when no captured invocation template is available.
+
 ## [2.6.5] - 2026-02-18
 
 ### Fixed
