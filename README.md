@@ -1,392 +1,200 @@
 # SyncClipboard
 
-> **v2.0.0 重大更新**：100% 可靠的剪贴板监听 + 多账号管理 + 实时同步
+Root/system-level cross-device clipboard sync module for Magisk/KernelSU/APatch.
 
-[中文](#中文) | [English](#english)
+Current stable architecture baseline: **v2.6.2 (system hook route)**.
 
 ---
 
 ## 中文
 
-基于 Root 权限的跨设备剪贴板同步 Magisk/KernelSU/APatch 模块。
+## 1. 项目定位
 
-### ✨ 特性
+SyncClipboard 通过 Root 环境在 Android 设备侧运行 `clipserver`，将本机剪贴板与 WebDAV 进行双向同步。
 
-#### 🆕 v2.0.0 新特性
+从 `v2.6.2` 开始，核心链路升级为：
 
-- ⚡ **100% 可靠监听** - 三层监听保障（Logcat → Inotify → Polling），确保剪贴板变化不遗漏
-- 🔄 **实时同步** - 剪贴板变化时立即上传（延迟 < 1 秒）
-- 👥 **多账号管理** - 支持添加多个 WebDAV 账号，一键切换
-- 🧪 **连接测试** - 添加账号前可测试连接是否正常
-- 📊 **监听状态显示** - 实时显示监听器工作状态
-- 🛡️ **深度定制系统兼容** - 7 种读取方法 + 6 种写入方法，自动降级
-
-#### 核心特性
-
-- 🔄 **自动同步** - 后台自动同步剪贴板内容到 WebDAV
-- ☁️ **WebDAV 支持** - 兼容坚果云、Nextcloud 等 WebDAV 服务
-- 🔗 **SyncClipboard 兼容** - 使用 SyncClipboard.json 格式，与官方客户端完全兼容
-- 🌐 **Web UI** - 现代化的 Web 配置界面（支持中英文）
-- 🔧 **灵活配置** - 可配置同步间隔（1-3600 秒）、启用/禁用自动同步
-- 📱 **通用兼容** - 一次安装，支持 Magisk/KernelSU/APatch
-- 🏗️ **多架构** - 支持 ARM64/ARMv7/x86/x86_64
-- 🔐 **智能去重** - 使用 SHA256 哈希避免重复同步
-
-### 📋 系统要求
-
-- **Android**: 5.0+ (API 21+)
-- **Root 环境**:
-  - Magisk 26.4+ 或
-  - KernelSU 0.6.6+ 或
-  - APatch 0.10.7+
-
-### 🚀 安装
-
-1. 下载最新的 `SyncClipboard-v2.0.0.zip`
-2. 在 Magisk/KernelSU/APatch 管理器中安装模块
-3. 重启设备
-4. 访问 `http://localhost:8964` 配置 WebDAV
-
-### ⚙️ 配置
-
-#### Web UI 配置
-
-访问 `http://localhost:8964` 进行配置：
-
-1. **账号管理**（v2.0 新增）
-   - 添加多个 WebDAV 账号
-   - 测试连接是否正常
-   - 一键切换激活账号
-   - 删除不需要的账号
-
-2. **同步设置**
-   - 同步间隔: 自动同步的时间间隔（1-3600 秒）
-   - 启用自动同步: 开启/关闭自动同步功能
-   - 监听状态: 实时显示剪贴板监听状态
-
-#### 命令行配置
-
-配置文件位于: `/data/adb/syncclipboard/config.json`
-
-```json
-{
-  "accounts": [
-    {
-      "id": "acc-1",
-      "name": "我的坚果云",
-      "url": "https://dav.jianguoyun.com/dav/",
-      "username": "your_username",
-      "password": "your_password",
-      "created": 1700000000
-    }
-  ],
-  "active_account_id": "acc-1",
-  "sync_interval": 60,
-  "enabled": true
-}
-```
-
-### 📖 使用说明
-
-#### 自动同步模式
-
-启用自动同步后，模块会：
-1. 每隔指定时间检查剪贴板内容
-2. 如果内容有变化（通过 SHA256 哈希判断），自动上传到 WebDAV
-3. 同时从 WebDAV 下载最新内容并更新本地剪贴板
-4. 在后台持续运行，无需手动操作
-
-#### 数据格式
-
-本模块使用 SyncClipboard 官方的 `SyncClipboard.json` 格式，与 Windows/Linux/macOS 客户端完全兼容：
-
-```json
-{
-  "type": "Text",
-  "hash": "A00A60CB9A0F34C816E90D3D1058881EAB9DACADAE6E7753334A1F939490FBD5",
-  "text": "剪贴板内容",
-  "hasData": false,
-  "dataName": null,
-  "size": 151
-}
-```
-
-#### 手动同步
-
-在 Web UI 中点击"立即同步"按钮，手动触发一次同步。
-
-### 🔧 API 端点
-
-| 端点 | 方法 | 描述 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/api/config` | GET | 获取配置 |
-| `/api/config` | POST | 更新配置 |
-| `/api/clipboard` | GET | 获取剪贴板内容 |
-| `/api/sync/now` | POST | 立即同步 |
-| `/api/sync/status` | GET | 同步状态 |
-
-### 📁 项目结构
-
-```
-SyncClipboard-magisk/
-├── bin/                    # 编译的二进制文件
-│   ├── arm64-v8a/
-│   ├── armeabi-v7a/
-│   ├── x86_64/
-│   └── x86/
-├── clipserver/             # Go 后端源码
-│   ├── cmd/clipserver/     # 主程序
-│   └── internal/           # 内部模块
-│       ├── clipboard/      # 剪贴板处理
-│       ├── config/         # 配置管理
-│       ├── handlers/       # HTTP 处理器
-│       ├── sync/           # 同步管理器
-│       └── webdav/         # WebDAV 客户端
-├── webroot/                # Web UI (Module Manager Integration)
-├── customize.sh            # 安装脚本
-├── service.sh              # 服务脚本
-└── module.prop             # 模块信息
-```
-
-### 🛠️ 开发
-
-#### 构建模块
-
-```bash
-# Linux/macOS
-bash build.sh
-
-# Windows (需要 WSL 或 Git Bash)
-bash build.sh
-```
-
-#### 编译 Go 后端
-
-```bash
-cd clipserver
-
-# 本地测试
-go build -o clipserver ./cmd/clipserver
-
-# 交叉编译 (ARM64)
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
-```
-
-#### 运行测试
-
-```bash
-cd clipserver
-go test ./... -v
-```
-
-### 🐛 故障排除
-
-#### 服务未启动
-
-```bash
-# 检查服务状态
-ps | grep clipserver
-
-# 查看日志
-cat /data/adb/syncclipboard/clipserver.log
-
-# 手动启动
-/data/adb/modules/syncclipboard/bin/arm64-v8a/clipserver -port 8964 -config /data/adb/syncclipboard/config.json
-```
-
-#### 无法访问 Web UI
-
-1. 确认服务已启动
-2. 检查端口是否被占用: `netstat -tuln | grep 8964`
-3. 尝试使用 `http://127.0.0.1:8964` 访问
-
-#### 剪贴板读取失败
-
-确保模块已正确安装并重启设备。剪贴板操作需要 Root 权限。
-
-### 📝 更新日志
-
-#### v1.0.0 (2026-02-15)
-
-- ✅ 初始版本发布
-- ✅ 支持 WebDAV 同步
-- ✅ 自动/手动同步模式
-- ✅ Web UI 配置界面
-- ✅ 多语言支持（中文/英文）
-- ✅ 通用环境支持（Magisk/KernelSU/APatch）
-
-### 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-### 📄 许可证
-
-MIT License
+- `system_server` ClipboardService Hook（LSPosed）
+- 本地协议目录（`/data/system/syncclipboard_hook`）
+- `clipserver` 通过 `system_hook` 优先读写
+- Web UI 功能保持完整，不删减
 
 ---
 
-## English
+## 2. 模块架构（重点）
 
-Root-based cross-device clipboard synchronization module for Magisk/KernelSU/APatch.
+系统架构：
 
-### ✨ Features
+1. **系统剪贴板层**（system_server）
+   - 由 `SyncClipboardSystemHook.apk` 在 LSPosed 中注入 Hook。
+   - 捕获系统剪贴板读写事件。
 
-- 🔄 **Auto Sync** - Automatically sync clipboard content to WebDAV in background
-- ☁️ **WebDAV Support** - Compatible with Jianguoyun, Nextcloud, and other WebDAV services
-- 🌐 **Web UI** - Modern web configuration interface (Chinese/English)
-- 🔧 **Flexible Config** - Configurable sync interval, enable/disable auto sync
-- 📱 **Universal** - One installation for Magisk/KernelSU/APatch
-- 🏗️ **Multi-arch** - Supports ARM64/ARMv7/x86/x86_64
+2. **协议层**（本地文件协议）
+   - 目录：`/data/system/syncclipboard_hook`
+   - 文件：
+     - `clipboard_state.json`（当前剪贴板状态）
+     - `clipboard_command.json`（clipserver 下发写命令）
+     - `clipboard_ack.json`（hook 执行回执）
+     - `hook_events.log`（hook 事件日志）
 
-### 📋 Requirements
+3. **服务层**（clipserver）
+   - API：`/api/clipboard`、`/api/sync/now`、`/api/accounts/test` 等。
+   - 策略优先级：`system_hook` 优先；其余方法仅作兜底诊断。
 
-- **Android**: 8.0+ (API 26+)
-- **Root Environment**:
-  - Magisk 26.4+ or
-  - KernelSU 0.6.6+ or
-  - APatch 0.10.7+
+4. **同步层**（WebDAV）
+   - 负责上传/下载 `SyncClipboard.json`。
 
-### 🚀 Installation
+5. **UI 层**（Web UI）
+   - 地址：`http://127.0.0.1:8964`
+   - 保留账号管理、连接测试、自动同步、立即同步、状态显示等全部功能。
 
-1. Download the latest `SyncClipboard_v1.0.0.zip`
-2. Install the module in Magisk/KernelSU/APatch Manager
-3. Reboot device
-4. Visit `http://localhost:8964` to configure WebDAV
+---
 
-### ⚙️ Configuration
+## 3. 系统要求
 
-#### Web UI Configuration
+- Android: 8.0+（建议 10+）
+- Root 环境（三选一）：
+  - Magisk
+  - KernelSU
+  - APatch
+- 建议开启：Zygisk
+- 必需：LSPosed（并正确启用本模块作用域）
 
-Visit `http://localhost:8964` to configure:
+---
 
-1. **Account Management**
-   - Add multiple WebDAV accounts
-   - Test account connectivity
-   - Switch active account instantly
-   - Remove unused accounts
+## 4. 安装与启用
 
-2. **Sync Settings**
-   - Sync Interval: Time interval for auto sync (seconds)
-   - Enable Auto Sync: Turn on/off auto sync feature
+1. 下载最新 `SyncClipboard-magisk_vX.Y.Z.zip`
+2. 在 Magisk/KernelSU/APatch 管理器安装模块
+3. 重启设备
+4. 在 LSPosed 中启用 `SyncClipboardSystemHook`
+5. 作用域勾选：`android`（system_server）
+6. 再次重启（建议）
+7. 访问 `http://127.0.0.1:8964` 配置 WebDAV
 
-#### Command Line Configuration
+> 说明：第 4~6 步缺失时，通常会出现 `system hook state not available` 或 `set timeout`。
 
-Config file location: `/data/adb/syncclipboard/config.json`
+---
 
-```json
-{
-  "accounts": [
-    {
-      "id": "acc-1",
-      "name": "Primary Account",
-      "url": "https://dav.jianguoyun.com/dav/",
-      "username": "your_username",
-      "password": "your_password",
-      "created": 1700000000
-    }
-  ],
-  "active_account_id": "acc-1",
-  "sync_interval": 60,
-  "enabled": true
-}
-```
+## 5. Web UI 功能（完整保留）
 
-### 📖 Usage
+- 多账号管理（新增、删除、切换）
+- 连接测试（保存前验证）
+- 自动同步开关
+- 同步间隔设置
+- 立即同步
+- 同步状态与错误提示
 
-#### Auto Sync Mode
+---
 
-When auto sync is enabled, the module will:
-1. Check clipboard content at specified intervals
-2. Automatically upload to WebDAV if content changes
-3. Run continuously in background, no manual operation needed
-
-#### Manual Sync
-
-Click "Sync Now" button in Web UI to manually trigger a sync.
-
-### 🔧 API Endpoints
+## 6. API 说明
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/api/config` | GET | Get configuration |
-| `/api/config` | POST | Update configuration |
-| `/api/clipboard` | GET | Get clipboard content |
-| `/api/sync/now` | POST | Sync now |
-| `/api/sync/status` | GET | Sync status |
+|---|---|---|
+| `/health` | GET | 健康检查 |
+| `/api/config` | GET/POST | 获取/更新配置 |
+| `/api/clipboard` | GET | 获取当前剪贴板 |
+| `/api/clipboard` | POST | 设置当前剪贴板 |
+| `/api/sync/now` | POST | 立即执行一次同步 |
+| `/api/sync/status` | GET | 获取同步状态 |
+| `/api/accounts/test` | POST | 测试 WebDAV 连接 |
 
-### 🛠️ Development
+---
 
-#### Build Module
+## 7. 使用方法（推荐流程）
 
-```bash
-# Linux/macOS
-bash build.sh
+1. 在 Web UI 添加并测试 WebDAV 账号
+2. 开启自动同步
+3. 在任意 App 复制文本（微信/浏览器/输入框）
+4. 在另一端触发同步或等待自动同步
+5. 另一端粘贴验证
 
-# Windows (requires WSL or Git Bash)
-bash build.sh
-```
+---
 
-#### Compile Go Backend
+## 8. 故障排查（system-hook 路线）
 
-```bash
-cd clipserver
+### 8.1 快速判断
 
-# Local testing
-go build -o clipserver ./cmd/clipserver
+- WebDAV 正常但剪贴板失败：优先检查 LSPosed 作用域
+- `api/clipboard` 返回 500：优先检查 hook 协议文件是否更新
 
-# Cross compile (ARM64)
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
-```
-
-#### Run Tests
+### 8.2 关键检查命令
 
 ```bash
-cd clipserver
-go test ./... -v
+# 1) 模块版本
+grep -E "version=|versionCode=" /data/adb/modules/syncclipboard/module.prop
+
+# 2) 服务进程
+pidof clipserver
+
+# 3) hook 协议目录
+ls -la /data/system/syncclipboard_hook
+
+# 4) system hook 包
+pm path com.syncclipboard.systemhook
+
+# 5) 最近日志（重点看 method=system_hook）
+tail -n 200 /data/adb/syncclipboard/clipserver.log
 ```
 
-### 🐛 Troubleshooting
+### 8.3 判定标准
 
-#### Service Not Started
+- 成功读剪贴板：`[clipboard/get] ok method=system_hook`
+- 成功写剪贴板：`[clipboard/set] ok method=system_hook`
 
-```bash
-# Check service status
-ps | grep clipserver
+---
 
-# View logs
-cat /data/adb/syncclipboard/clipserver.log
+## 9. 反馈格式（请尽量按模板）
 
-# Start manually
-/data/adb/modules/syncclipboard/bin/arm64-v8a/clipserver -port 8964 -config /data/adb/syncclipboard/config.json
+为快速定位，请按以下模板反馈：
+
+```text
+[设备信息]
+机型:
+系统版本:
+Root方案: (Magisk/KernelSU/APatch)
+LSPosed版本:
+模块版本:
+
+[现象]
+1) 系统复制 -> /api/clipboard 结果:
+2) /api/accounts/test 结果:
+3) /api/sync/now 结果:
+4) WebDAV下发后能否粘贴:
+
+[日志/命令输出]
+1) grep -E "version=|versionCode=" /data/adb/modules/syncclipboard/module.prop
+2) pidof clipserver
+3) ls -la /data/system/syncclipboard_hook
+4) pm path com.syncclipboard.systemhook
+5) tail -n 200 /data/adb/syncclipboard/clipserver.log
+6) logcat -d | grep -i SyncClipboardHook | tail -n 100
+
+[补充说明]
+是否刚重启:
+是否刚切换LSPosed作用域:
+是否存在其他剪贴板/Xposed模块:
 ```
 
-#### Cannot Access Web UI
+---
 
-1. Confirm service is running
-2. Check if port is occupied: `netstat -tuln | grep 8964`
-3. Try accessing `http://127.0.0.1:8964`
+## 10. 变更记录
 
-#### Clipboard Read Failed
+- 详细版本记录见：`CHANGELOG.md`
+- `v2.6.2` 为 system-hook 首个稳定基线版本
 
-Ensure the module is properly installed and device is rebooted. Clipboard operations require Root privileges.
+---
 
-### 📝 Changelog
+## 11. English (Brief)
 
-#### v1.0.0 (2026-02-15)
+SyncClipboard now uses a system hook route (LSPosed + system_server ClipboardService hook) as primary clipboard backend.
 
-- ✅ Initial release
-- ✅ WebDAV sync support
-- ✅ Auto/manual sync modes
-- ✅ Web UI configuration interface
-- ✅ Multi-language support (Chinese/English)
-- ✅ Universal environment support (Magisk/KernelSU/APatch)
+Quick start:
 
-### 🤝 Contributing
+1. Install module ZIP
+2. Reboot
+3. Enable `SyncClipboardSystemHook` in LSPosed with `android` scope
+4. Reboot
+5. Configure WebDAV at `http://127.0.0.1:8964`
 
-Issues and Pull Requests are welcome!
-
-### 📄 License
-
-MIT License
+For troubleshooting and reporting format, use Sections 8 and 9 above.
