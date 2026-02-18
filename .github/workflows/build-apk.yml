@@ -30,7 +30,7 @@ jobs:
         run: |
           cd cliphelper
           chmod +x gradlew
-          ./gradlew -p ../systemhook-lsposed/app clean assembleRelease
+          ./gradlew -p ../systemhook-lsposed :app:clean :app:assembleRelease
 
       - name: Verify system hook manifest
         run: |
