@@ -17,6 +17,14 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
+is_pid_alive() {
+  PID="$1"
+  case "$PID" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ -d "/proc/$PID" ]
+}
+
 is_module_disabled() {
   [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]
 }
@@ -66,7 +74,7 @@ EOF
 stop_stale_server() {
   if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE" 2>/dev/null)
-    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    if is_pid_alive "$OLD_PID"; then
       log "Stopping stale clipserver instance: $OLD_PID"
       kill "$OLD_PID" 2>/dev/null
       sleep 2
@@ -92,7 +100,7 @@ start_clipserver() {
 # 确保单实例监控器
 if [ -f "$MONITOR_PID_FILE" ]; then
   OLD_MONITOR_PID=$(cat "$MONITOR_PID_FILE" 2>/dev/null)
-  if [ -n "$OLD_MONITOR_PID" ] && kill -0 "$OLD_MONITOR_PID" 2>/dev/null; then
+  if is_pid_alive "$OLD_MONITOR_PID"; then
     exit 0
   fi
 fi

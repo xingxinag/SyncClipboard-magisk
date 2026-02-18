@@ -10,8 +10,8 @@ echo "====================================="
 echo ""
 
 # Version information
-VERSION="2.6.4"
-VERSION_CODE="20604"
+VERSION="2.6.5"
+VERSION_CODE="20605"
 MODULE_NAME="SyncClipboard-magisk"
 OUTPUT_ZIP="${MODULE_NAME}_v${VERSION}.zip"
 

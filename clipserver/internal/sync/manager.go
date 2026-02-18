@@ -15,7 +15,7 @@ import (
 // Manager 管理自动同步
 type Manager struct {
 	config       *config.Config
-	webdavClient *webdav.Client
+	webdavClient SyncClient
 	monitor      monitor.ClipboardMonitor
 	ticker       *time.Ticker
 	stopChan     chan bool
@@ -25,8 +25,18 @@ type Manager struct {
 	lastSyncUnix int64
 }
 
+type SyncClient interface {
+	UploadClipboard(data *syncdata.ClipboardData) error
+	DownloadClipboard() (*syncdata.ClipboardData, error)
+}
+
+var (
+	clipboardGetFn = clipboard.GetClipboard
+	clipboardSetFn = clipboard.SetClipboard
+)
+
 // NewManager 创建同步管理器
-func NewManager(cfg *config.Config, client *webdav.Client) *Manager {
+func NewManager(cfg *config.Config, client SyncClient) *Manager {
 	return &Manager{
 		config:       cfg,
 		webdavClient: client,
@@ -111,7 +121,7 @@ func (m *Manager) Stop() {
 // syncUpload 上传本地剪贴板到 WebDAV
 func (m *Manager) syncUpload() {
 	// 获取当前剪贴板内容
-	content, err := clipboard.GetClipboard()
+	content, err := clipboardGetFn()
 	if err != nil {
 		log.Printf("Failed to get clipboard: %v", err)
 		return
@@ -165,7 +175,7 @@ func (m *Manager) syncDownload() {
 	}
 
 	// 更新本地剪贴板
-	err = clipboard.SetClipboard(clipData.GetText())
+	err = clipboardSetFn(clipData.GetText())
 	if err != nil {
 		log.Printf("Failed to set clipboard: %v", err)
 		return
@@ -183,21 +193,39 @@ func (m *Manager) SyncNow() error {
 		return webdav.ErrNotConfigured
 	}
 
-	content, err := clipboard.GetClipboard()
+	content, err := clipboardGetFn()
 	if err != nil {
 		return err
 	}
 
-	clipData := syncdata.NewTextClipboard(content)
-	err = m.webdavClient.UploadClipboard(clipData)
+	localData := syncdata.NewTextClipboard(content)
+
+	remoteData, downloadErr := m.webdavClient.DownloadClipboard()
+	if downloadErr == nil && remoteData != nil && remoteData.IsText() {
+		if remoteData.GetHash() != localData.GetHash() {
+			if err := clipboardSetFn(remoteData.GetText()); err != nil {
+				return err
+			}
+			m.lastHash = remoteData.GetHash()
+			atomic.AddInt64(&m.syncCount, 1)
+			atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
+			log.Printf("Manual sync pulled from WebDAV (hash: %s, size: %d bytes)", remoteData.GetHash()[:8], remoteData.Size)
+			return nil
+		}
+	}
+
+	err = m.webdavClient.UploadClipboard(localData)
 	if err != nil {
+		if downloadErr != nil {
+			return downloadErr
+		}
 		return err
 	}
 
-	m.lastHash = clipData.GetHash()
+	m.lastHash = localData.GetHash()
 	atomic.AddInt64(&m.syncCount, 1)
 	atomic.StoreInt64(&m.lastSyncUnix, time.Now().Unix())
-	log.Printf("Manual sync completed (hash: %s, size: %d bytes)", clipData.GetHash()[:8], clipData.Size)
+	log.Printf("Manual sync pushed to WebDAV (hash: %s, size: %d bytes)", localData.GetHash()[:8], localData.Size)
 	return nil
 }
 
@@ -212,7 +240,7 @@ func (m *Manager) GetStats() (syncCount int64, lastSyncUnix int64) {
 }
 
 // UpdateConfig 更新配置并重启同步
-func (m *Manager) UpdateConfig(cfg *config.Config, client *webdav.Client) {
+func (m *Manager) UpdateConfig(cfg *config.Config, client SyncClient) {
 	if m.running {
 		m.Stop()
 	}

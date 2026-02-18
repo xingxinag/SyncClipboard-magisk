@@ -2,6 +2,15 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.5] - 2026-02-18
+
+### Fixed
+- Fixed `POST /api/sync/now` direction logic: when remote WebDAV clipboard differs from local clipboard, it now pulls remote text and writes it to system clipboard first instead of always pushing local content.
+- Fixed `service.sh` stale supervisor detection by replacing `kill -0` checks with `/proc/<pid>` existence checks, preventing false-positive "already running" states on some ROM shell environments.
+
+### Added
+- Added regression tests for `SyncNow` pull/push decisions and download-failure fallback behavior.
+
 ## [2.6.2] - 2026-02-18
 
 ### Added
