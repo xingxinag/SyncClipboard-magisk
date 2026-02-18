@@ -2,6 +2,12 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.10] - 2026-02-18
+
+### Fixed
+- Fixed WebUI stutter/blank risk by adding in-flight guards to prevent overlapping periodic `refreshClipboard`/`refreshStatus` requests.
+- Reduced polling pressure (clipboard: 3s, status: 5s) to improve Module Manager WebView stability on constrained ROM environments.
+
 ## [2.6.9] - 2026-02-18
 
 ### Changed

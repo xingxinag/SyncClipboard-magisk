@@ -646,6 +646,8 @@
         };
         
         let currentLang = localStorage.getItem('lang') || 'zh-CN';
+        let refreshingClipboard = false;
+        let refreshingStatus = false;
         
         // Toast 提示函数
         function showToast(title, message, type = 'info') {
@@ -1033,6 +1035,10 @@
         }
 
         async function refreshStatus() {
+            if (refreshingStatus) {
+                return;
+            }
+            refreshingStatus = true;
             try {
                 const { data: status } = await apiRequest('refresh_status', '/api/status');
                 const serviceEl = document.getElementById('serviceStatus');
@@ -1054,6 +1060,8 @@
                 }
             } catch (err) {
                 console.error('Refresh status error:', err);
+            } finally {
+                refreshingStatus = false;
             }
         }
         
@@ -1346,7 +1354,11 @@
         // 刷新剪贴板
         let lastClipboardContent = '';
         async function refreshClipboard(evt) {
+            if (refreshingClipboard) {
+                return;
+            }
             const btn = evt ? evt.target : null;
+            refreshingClipboard = true;
             
             try {
                 if (btn) {
@@ -1391,6 +1403,7 @@
                     showToast(i18n[currentLang].getFailed, formatApiError(err), 'error');
                 }
             } finally {
+                refreshingClipboard = false;
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = btn.dataset.originalText;
@@ -1467,12 +1480,12 @@
             // 每 2 秒刷新一次剪贴板（实时监听展示）
             setInterval(() => {
                 refreshClipboard();
-            }, 2000);
+            }, 3000);
 
             // 每 3 秒刷新一次服务真实状态
             setInterval(() => {
                 refreshStatus();
-            }, 3000);
+            }, 5000);
         });
     </script>
     
