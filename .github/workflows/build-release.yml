@@ -76,32 +76,32 @@ jobs:
         
         cd ..
 
-    - name: Build Helper APK
+    - name: Build System Hook APK
       run: |
         cd cliphelper
         chmod +x gradlew
-        ./gradlew clean assembleRelease
+        ./gradlew -p ../systemhook-lsposed/app clean assembleRelease
 
-    - name: Verify helper manifest
+    - name: Verify system hook manifest
       run: |
         BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -n 1)
-        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
-        grep -q "com.syncclipboard.helper" /tmp/manifest.txt
-        if grep -q "android.permission.BIND_ACCESSIBILITY_SERVICE" /tmp/manifest.txt; then
-          echo "Unexpected BIND_ACCESSIBILITY_SERVICE found in helper manifest"
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree systemhook-lsposed/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
+        grep -q "com.syncclipboard.systemhook" /tmp/manifest.txt
+        if ! grep -q "xposedmodule" /tmp/manifest.txt; then
+          echo "xposedmodule metadata missing in system hook manifest"
           exit 1
         fi
 
-    - name: Sign Helper APK
+    - name: Sign System Hook APK
       run: |
         BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -n 1)
-        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk
-        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" verify cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk systemhook-lsposed/app/build/outputs/apk/release/app-release-unsigned.apk
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" verify systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk
 
-    - name: Integrate Helper APK into module
+    - name: Integrate System Hook APK into module
       run: |
-        mkdir -p system/priv-app/SyncClipboardHelper
-        cp cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk system/priv-app/SyncClipboardHelper/SyncClipboardHelper.apk
+        mkdir -p system/priv-app/SyncClipboardSystemHook
+        cp systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk system/priv-app/SyncClipboardSystemHook/SyncClipboardSystemHook.apk
         
     - name: Show binary sizes
       run: |
@@ -158,7 +158,7 @@ jobs:
           echo "2. 在 Magisk/KernelSU/APatch 管理器中安装"
           echo "3. 重启设备"
           echo "4. 访问 \`http://localhost:8964\` 配置"
-          echo "5. Helper APK 已集成到模块包内（无需单独下载）"
+          echo "5. System Hook 模块 APK 已集成到模块包内（无需单独下载）"
           echo ""
           echo "### 📊 文件信息"
           echo ""

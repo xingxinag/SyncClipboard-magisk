@@ -63,14 +63,6 @@ func ValidateContent(content string) error {
 // 使用 7 种方法尝试，确保在各种深度定制系统上都能工作
 func GetClipboard() (string, error) {
 	strat := detectClipboardStrategy()
-	triedCmd := false
-	skippedCmd := false
-
-	for _, method := range strat.readOrder {
-		if method.name == "cmd_clipboard" {
-			triedCmd = true
-		}
-	}
 	for _, method := range strat.readOrder {
 		log.Printf("[clipboard/get] start method=%s", method.name)
 		content, err := method.fn()
@@ -80,18 +72,11 @@ func GetClipboard() (string, error) {
 		}
 		if err != nil {
 			log.Printf("[clipboard/get] fail method=%s err=%v", method.name, err)
-			if method.name == "cmd_clipboard" && strings.Contains(strings.ToLower(err.Error()), "invalid output") {
-				skippedCmd = true
-			}
 		}
 	}
 
-	if triedCmd && skippedCmd {
-		log.Printf("[clipboard/get] strategy_hint: cmd_clipboard unstable on this ROM, prioritize service_call/dumpsys")
-	}
-
 	log.Printf("[clipboard/get] failed all methods")
-	return "", fmt.Errorf("%w: all 7 methods failed", ErrClipboardAccess)
+	return "", fmt.Errorf("%w: all %d methods failed", ErrClipboardAccess, len(strat.readOrder))
 }
 
 // getClipboardCmd 使用 cmd clipboard 命令（Android 10+）
@@ -220,7 +205,7 @@ func SetClipboard(content string) error {
 	}
 
 	log.Printf("[clipboard/set] failed all methods")
-	return fmt.Errorf("%w: all 6 methods failed", ErrClipboardAccess)
+	return fmt.Errorf("%w: all %d methods failed", ErrClipboardAccess, len(strat.writeOrder))
 }
 
 // setClipboardCmd 使用 cmd clipboard 命令（Android 10+）

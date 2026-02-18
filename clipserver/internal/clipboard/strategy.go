@@ -19,21 +19,17 @@ type strategy struct {
 }
 
 func detectClipboardStrategy() strategy {
-	// root-first 固定顺序：优先使用真实剪贴板方法
+	// system-first 固定顺序：优先 system_server hook，移除 helper/shared 旧路径
 	s := strategy{
 		readOrder: []methodRead{
-			{name: "apk_helper", fn: getClipboardAPK},         // 最优：通过 APK 访问真实系统剪贴板
-			{name: "shared_file", fn: getClipboardSharedFile}, // 次优：共享文件（降级方案）
-			{name: "termux", fn: getClipboardTermux},          // 备选：Termux API（如果安装）
+			{name: "system_hook", fn: getClipboardSystemHook},
 			{name: "service_call", fn: getClipboardServiceCall},
 			{name: "dumpsys", fn: getClipboardDumpsys},
 			{name: "database", fn: getClipboardDatabase},
 			{name: "shared_memory", fn: getClipboardSharedMemory},
 		},
 		writeOrder: []methodWrite{
-			{name: "apk_helper", fn: setClipboardAPK},         // 最优：通过 APK 访问真实系统剪贴板
-			{name: "shared_file", fn: setClipboardSharedFile}, // 次优：共享文件（降级方案）
-			{name: "termux", fn: setClipboardTermux},          // 备选：Termux API（如果安装）
+			{name: "system_hook", fn: setClipboardSystemHook},
 			{name: "service_call", fn: setClipboardServiceCall},
 			{name: "database", fn: setClipboardDatabase},
 			{name: "shared_memory", fn: setClipboardSharedMemory},

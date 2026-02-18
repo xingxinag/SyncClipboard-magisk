@@ -3,7 +3,8 @@ name: Build APK
 on:
   push:
     paths:
-      - 'cliphelper/**'
+      - 'systemhook-lsposed/**'
+      - 'cliphelper/signing/**'
       - 'build.sh'
       - 'customize.sh'
       - 'post-fs-data.sh'
@@ -25,32 +26,32 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       
-      - name: Build APK
+      - name: Build System Hook APK
         run: |
           cd cliphelper
           chmod +x gradlew
-          ./gradlew clean assembleRelease
+          ./gradlew -p ../systemhook-lsposed/app clean assembleRelease
 
-      - name: Verify helper manifest
+      - name: Verify system hook manifest
         run: |
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
-          "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
-          grep -q "com.syncclipboard.helper" /tmp/manifest.txt
-          if grep -q "android.permission.BIND_ACCESSIBILITY_SERVICE" /tmp/manifest.txt; then
-            echo "Unexpected BIND_ACCESSIBILITY_SERVICE found in helper manifest"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree systemhook-lsposed/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
+          grep -q "com.syncclipboard.systemhook" /tmp/manifest.txt
+          if ! grep -q "xposedmodule" /tmp/manifest.txt; then
+            echo "xposedmodule metadata missing in system hook manifest"
             exit 1
           fi
 
-      - name: Sign APK
+      - name: Sign System Hook APK
         run: |
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner verify cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk systemhook-lsposed/app/build/outputs/apk/release/app-release-unsigned.apk
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner verify systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk
 
       - name: Integrate APK into module tree
         run: |
-          mkdir -p system/priv-app/SyncClipboardHelper
-          cp cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk system/priv-app/SyncClipboardHelper/SyncClipboardHelper.apk
+          mkdir -p system/priv-app/SyncClipboardSystemHook
+          cp systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk system/priv-app/SyncClipboardSystemHook/SyncClipboardSystemHook.apk
 
       - name: Build integrated module ZIP
         run: |
@@ -66,5 +67,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SyncClipboardHelper
-          path: cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk
+          name: SyncClipboardSystemHook
+          path: systemhook-lsposed/app/build/outputs/apk/release/SyncClipboardSystemHook-signed.apk
