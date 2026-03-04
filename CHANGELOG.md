@@ -2,6 +2,13 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.11] - 2026-03-04
+
+### Fixed
+- Fixed APatch first-open freeze issue by normalizing `clipserver` process cgroups at startup.
+- Added startup cgroup migration in `service.sh`: move process out of `freezer:/frozen` into thaw/background groups to avoid inherited top-app frozen state.
+- Added cgroup summary logging on startup for faster field diagnostics.
+
 ## [2.6.10] - 2026-02-18
 
 ### Fixed

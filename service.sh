@@ -17,6 +17,29 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
+move_pid_to_cgroup() {
+  TARGET_FILE="$1"
+  TARGET_PID="$2"
+  if [ -n "$TARGET_FILE" ] && [ -f "$TARGET_FILE" ] && [ -n "$TARGET_PID" ]; then
+    echo "$TARGET_PID" > "$TARGET_FILE" 2>/dev/null
+  fi
+}
+
+normalize_process_cgroups() {
+  TARGET_PID="$1"
+  if ! is_pid_alive "$TARGET_PID"; then
+    return
+  fi
+
+  # 防止进程被启动来源放入 frozen cgroup（APatch/管理器首次打开常见）
+  move_pid_to_cgroup "/dev/freezer/thaw/tasks" "$TARGET_PID"
+  move_pid_to_cgroup "/dev/freezer/tasks" "$TARGET_PID"
+
+  # 迁移到后台调度组，避免继承 top-app 组后被策略冻结
+  move_pid_to_cgroup "/dev/cpuset/background/tasks" "$TARGET_PID"
+  move_pid_to_cgroup "/dev/stune/background/tasks" "$TARGET_PID"
+}
+
 is_pid_alive() {
   PID="$1"
   case "$PID" in
@@ -93,8 +116,13 @@ start_clipserver() {
     >> "$LOG_FILE" 2>&1 &
 
   CLIPSERVER_PID=$!
+  normalize_process_cgroups "$CLIPSERVER_PID"
   echo "$CLIPSERVER_PID" > "$PID_FILE"
   log "clipserver started with PID: $CLIPSERVER_PID"
+  if [ -f "/proc/$CLIPSERVER_PID/cgroup" ]; then
+    CGROUP_SUMMARY=$(cat "/proc/$CLIPSERVER_PID/cgroup" 2>/dev/null | tr '\n' ';')
+    log "clipserver cgroups: $CGROUP_SUMMARY"
+  fi
 }
 
 # 确保单实例监控器
