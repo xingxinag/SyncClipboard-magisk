@@ -83,21 +83,18 @@ func (m *Manager) Start() {
 		tickerC = m.ticker.C
 	}
 
-	// 创建混合监听器（自动降级，确保 100% 可靠）
-	m.monitor = monitor.NewHybridMonitor()
+	log.Printf("Starting auto-sync (upload=%v, download=%v, interval=%ds)",
+		m.config.AutoUploadEnabled, m.config.AutoDownloadEnabled, m.config.SyncInterval)
 
-	log.Printf("Starting auto-sync with interval: %d seconds", m.config.SyncInterval)
-	log.Println("Starting clipboard monitor for real-time sync")
-
+	// 只有自动上传开启时才需要实时监听剪贴板变化
 	if m.config.AutoUploadEnabled {
-		// 启动监听器，传入回调函数
+		m.monitor = monitor.NewHybridMonitor()
 		if err := m.monitor.Start(func(content string) {
-			// 剪贴板变化时立即触发上传
 			m.syncUploadWithContent(content)
 		}); err != nil {
 			log.Printf("Failed to start clipboard monitor: %v", err)
-			// 监听器启动失败不影响定时同步
 		}
+		log.Println("Clipboard monitor started for real-time upload")
 	}
 
 	go func() {

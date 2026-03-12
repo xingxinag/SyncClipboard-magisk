@@ -119,6 +119,69 @@ func TestDownloadNowEmptyHashNoPanic(t *testing.T) {
 	}
 }
 
+// TestStartSkipsMonitorWhenUploadDisabled 验证仅开启自动拉取时不创建监听器（省电）
+func TestStartSkipsMonitorWhenUploadDisabled(t *testing.T) {
+	client := &fakeSyncClient{downloadData: syncdata.NewTextClipboard("x")}
+	cfg := &config.Config{
+		Enabled:             true,
+		AutoUploadEnabled:   false, // 上传关闭
+		AutoDownloadEnabled: true,  // 拉取开启
+		SyncInterval:        3600,  // 极长间隔，避免测试期间真正触发下载
+	}
+	m := NewManager(cfg, client)
+	withClipboardStubs(t,
+		func() (string, error) { return "", nil },
+		func(string) error { return nil },
+	)
+	m.Start()
+	defer m.Stop()
+
+	if m.monitor != nil {
+		t.Error("monitor should be nil when AutoUploadEnabled=false")
+	}
+}
+
+// TestStartSkipsMonitorWhenBothDisabled 验证两个自动开关都关闭时 manager 不启动
+func TestStartSkipsMonitorWhenBothDisabled(t *testing.T) {
+	client := &fakeSyncClient{}
+	cfg := &config.Config{
+		Enabled:             true,
+		AutoUploadEnabled:   false,
+		AutoDownloadEnabled: false,
+	}
+	m := NewManager(cfg, client)
+	m.Start()
+
+	if m.running {
+		t.Error("manager should not be running when both auto switches are off")
+	}
+	if m.monitor != nil {
+		t.Error("monitor should be nil when both auto switches are off")
+	}
+}
+
+// TestStartCreatesMonitorWhenUploadEnabled 验证开启自动上传时监听器被创建
+func TestStartCreatesMonitorWhenUploadEnabled(t *testing.T) {
+	client := &fakeSyncClient{}
+	cfg := &config.Config{
+		Enabled:             true,
+		AutoUploadEnabled:   true,
+		AutoDownloadEnabled: false,
+		SyncInterval:        3600,
+	}
+	m := NewManager(cfg, client)
+	withClipboardStubs(t,
+		func() (string, error) { return "", nil },
+		func(string) error { return nil },
+	)
+	m.Start()
+	defer m.Stop()
+
+	if m.monitor == nil {
+		t.Error("monitor should be created when AutoUploadEnabled=true")
+	}
+}
+
 // TestShortHash 验证 shortHash 对空串和短串都安全
 func TestShortHash(t *testing.T) {
 	cases := []struct {
