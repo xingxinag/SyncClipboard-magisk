@@ -35,6 +35,14 @@ var (
 	clipboardSetFn = clipboard.SetClipboard
 )
 
+// shortHash 安全返回 hash 的前 n 字符，防止空串 slice panic
+func shortHash(hash string, n int) string {
+	if len(hash) < n {
+		return hash
+	}
+	return hash[:n]
+}
+
 // NewManager 创建同步管理器
 func NewManager(cfg *config.Config, client SyncClient) *Manager {
 	return &Manager{
@@ -165,7 +173,7 @@ func (m *Manager) syncUploadWithContent(content string) {
 	}
 
 	m.recordSync(clipData.GetHash())
-	log.Printf("Uploaded clipboard to WebDAV (hash: %s, size: %d bytes)", clipData.GetHash()[:8], clipData.Size)
+	log.Printf("Uploaded clipboard to WebDAV (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
 }
 
 // syncDownload 从 WebDAV 下载并更新本地剪贴板
@@ -197,7 +205,7 @@ func (m *Manager) syncDownload() {
 	}
 
 	m.recordSync(clipData.GetHash())
-	log.Printf("Downloaded clipboard from WebDAV (hash: %s, size: %d bytes)", clipData.GetHash()[:8], clipData.Size)
+	log.Printf("Downloaded clipboard from WebDAV (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
 }
 
 // UploadNow 手动上传本地剪贴板到 WebDAV
@@ -218,7 +226,7 @@ func (m *Manager) UploadNow() error {
 	}
 
 	m.recordSync(localData.GetHash())
-	log.Printf("Manual upload pushed to WebDAV (hash: %s, size: %d bytes)", localData.GetHash()[:8], localData.Size)
+	log.Printf("Manual upload pushed to WebDAV (hash: %s, size: %d bytes)", shortHash(localData.GetHash(), 8), localData.Size)
 	return nil
 }
 
@@ -242,7 +250,7 @@ func (m *Manager) DownloadNow() error {
 	}
 
 	m.recordSync(remoteData.GetHash())
-	log.Printf("Manual download pulled from WebDAV (hash: %s, size: %d bytes)", remoteData.GetHash()[:8], remoteData.Size)
+	log.Printf("Manual download pulled from WebDAV (hash: %s, size: %d bytes)", shortHash(remoteData.GetHash(), 8), remoteData.Size)
 	return nil
 }
 

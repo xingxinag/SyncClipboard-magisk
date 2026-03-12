@@ -112,6 +112,37 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// TestGetHashEmptyFieldLazyCompute 验证旧版服务端未写 hash 时不会 panic，且能正确懒计算
+func TestGetHashEmptyFieldLazyCompute(t *testing.T) {
+	// 模拟从旧版 WebDAV 服务端反序列化的数据（hash 字段缺失）
+	jsonStr := `{"type":"Text","hash":"","text":"hello world","hasData":false,"dataName":null,"size":11}`
+	data, err := FromJSON(jsonStr)
+	if err != nil {
+		t.Fatalf("FromJSON failed: %v", err)
+	}
+
+	// 必须不 panic，且返回非空 hash
+	hash := data.GetHash()
+	if hash == "" {
+		t.Error("GetHash() should lazy-compute hash when field is empty")
+	}
+	if len(hash) < 8 {
+		t.Errorf("GetHash() returned suspiciously short hash: %q", hash)
+	}
+	// 第二次调用应返回相同值（缓存）
+	if data.GetHash() != hash {
+		t.Error("GetHash() should return cached value on second call")
+	}
+}
+
+// TestGetHashBothEmptyReturnsEmpty 验证 hash 和 text 都为空时返回空串而非 panic
+func TestGetHashBothEmptyReturnsEmpty(t *testing.T) {
+	data := &ClipboardData{Type: "Text", Hash: "", Text: ""}
+	if got := data.GetHash(); got != "" {
+		t.Errorf("expected empty hash, got %q", got)
+	}
+}
+
 func TestCalculateHash(t *testing.T) {
 	// Test that same content produces same hash
 	text := "Test"

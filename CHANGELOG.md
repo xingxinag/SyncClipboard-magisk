@@ -2,6 +2,14 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.12] - 2026-03-12
+
+### Fixed
+- Fixed `panic: runtime error: slice bounds out of range [:8] with length 0` in `sync/manager.go` when WebDAV server returns clipboard data without a `hash` field (e.g. older server versions).
+- `GetHash()` now lazy-computes and caches a SHA256 hash from `Text` when the `hash` field is empty, preventing nil-slice panics at all 4 call sites.
+- Added `shortHash()` safety helper in `manager.go` to guard all log truncation slices against short/empty strings.
+- Added regression tests: `TestGetHashEmptyFieldLazyCompute`, `TestGetHashBothEmptyReturnsEmpty`, `TestDownloadNowEmptyHashNoPanic`, `TestShortHash`.
+
 ## [2.6.11] - 2026-03-04
 
 ### Fixed

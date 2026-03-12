@@ -55,8 +55,13 @@ func calculateHash(text string) string {
 	return strings.ToUpper(hex.EncodeToString(hash[:]))
 }
 
-// GetHash 返回当前数据的哈希值
+// GetHash 返回当前数据的哈希值。
+// 若 Hash 字段为空（如旧版 WebDAV 服务端未写入），则按 Text 内容懒计算并缓存，
+// 防止调用方对空串做切片操作导致 panic。
 func (c *ClipboardData) GetHash() string {
+	if c.Hash == "" && c.Text != "" {
+		c.Hash = calculateHash(c.Text)
+	}
 	return c.Hash
 }
 
