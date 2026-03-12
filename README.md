@@ -2,7 +2,7 @@
 
 Root/system-level cross-device clipboard sync module for Magisk/KernelSU/APatch.
 
-Current stable architecture baseline: **v2.6.2 (system hook route)**.
+Current stable architecture baseline: **v2.6.2 (system hook route)**. Latest release: **v2.6.13**.
 
 ---
 

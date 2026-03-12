@@ -2,6 +2,20 @@
 
 All notable changes to SyncClipboard-magisk are documented in this file.
 
+## [2.6.13] - 2026-03-12
+
+### Fixed
+- Skip creating clipboard monitor entirely when `auto_upload_enabled=false`, eliminating unnecessary process/thread overhead and power drain.
+- Previously a `HybridMonitor` object was unconditionally allocated even when upload was disabled; now it is only created when actually needed.
+
+### Changed
+- `Start()` log now prints both switch states and interval in one line for easier diagnostics: `Starting auto-sync (upload=true, download=false, interval=30s)`.
+
+### Tests
+- Added `TestStartSkipsMonitorWhenUploadDisabled`: verifies `m.monitor == nil` when only auto-download is on.
+- Added `TestStartSkipsMonitorWhenBothDisabled`: verifies manager does not start when both switches are off.
+- Added `TestStartCreatesMonitorWhenUploadEnabled`: verifies monitor is created when auto-upload is on.
+
 ## [2.6.12] - 2026-03-12
 
 ### Fixed
