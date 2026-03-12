@@ -1,0 +1,198 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+        
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Update module.prop version
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        VERSION_CODE=$(echo "$VERSION" | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+        sed -i "s/^version=.*/version=$VERSION/" module.prop
+        sed -i "s/^versionCode=.*/versionCode=$VERSION_CODE/" module.prop
+        
+    - name: Build Go binaries
+      run: |
+        cd clipserver
+        
+        # Build for arm64-v8a
+        echo "Building arm64-v8a..."
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../bin/arm64-v8a/clipserver ./cmd/clipserver
+        
+        # Build for armeabi-v7a
+        echo "Building armeabi-v7a..."
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w" -o ../bin/armeabi-v7a/clipserver ./cmd/clipserver
+        
+        # Build for x86_64
+        echo "Building x86_64..."
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../bin/x86_64/clipserver ./cmd/clipserver
+        
+        # Build for x86
+        echo "Building x86..."
+        CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -ldflags="-s -w" -o ../bin/x86/clipserver ./cmd/clipserver
+        
+        cd ..
+
+    - name: Build Helper APK
+      run: |
+        cd cliphelper
+        chmod +x gradlew
+        ./gradlew clean assembleRelease
+
+    - name: Verify helper manifest
+      run: |
+        BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -n 1)
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
+        grep -q "com.syncclipboard.helper" /tmp/manifest.txt
+        if grep -q "android.permission.BIND_ACCESSIBILITY_SERVICE" /tmp/manifest.txt; then
+          echo "Unexpected BIND_ACCESSIBILITY_SERVICE found in helper manifest"
+          exit 1
+        fi
+
+    - name: Sign Helper APK
+      run: |
+        BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -n 1)
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk
+        "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" verify cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk
+
+    - name: Integrate Helper APK into module
+      run: |
+        mkdir -p system/priv-app/SyncClipboardHelper
+        cp cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk system/priv-app/SyncClipboardHelper/SyncClipboardHelper.apk
+        
+    - name: Show binary sizes
+      run: |
+        echo "Binary sizes:"
+        du -h bin/*/clipserver
+        
+    - name: Create module package
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        OUTPUT_ZIP="SyncClipboard-magisk_v${VERSION}.zip"
+        
+        # Files to include
+        zip -r "$OUTPUT_ZIP" \
+          META-INF \
+          bin \
+          system \
+          webroot \
+          config \
+          module.prop \
+          customize.sh \
+          service.sh \
+          post-fs-data.sh \
+          sepolicy.rule \
+          uninstall.sh \
+          README.md \
+          COMPATIBILITY.md \
+          -x "*.git*" "*.DS_Store" "*/.gitignore" "bin/x86/*" "bin/x86_64/*"
+        
+        echo "Package created: $OUTPUT_ZIP"
+        ls -lh "$OUTPUT_ZIP"
+        
+        # Save for later steps
+        echo "OUTPUT_ZIP=$OUTPUT_ZIP" >> $GITHUB_ENV
+        
+    - name: Generate checksums
+      run: |
+        sha256sum "$OUTPUT_ZIP" > "$OUTPUT_ZIP.sha256"
+        md5sum "$OUTPUT_ZIP" > "$OUTPUT_ZIP.md5"
+        
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        OUTPUT_ZIP="SyncClipboard-magisk_v${VERSION}.zip"
+        SHA256_SUM=$(cut -d' ' -f1 "${OUTPUT_ZIP}.sha256")
+        FILE_SIZE=$(du -h "${OUTPUT_ZIP}" | cut -f1)
+
+        {
+          echo "## SyncClipboard v${VERSION}"
+          echo ""
+          echo "### 📦 安装说明"
+          echo ""
+          echo "1. 下载 \`${OUTPUT_ZIP}\`"
+          echo "2. 在 Magisk/KernelSU/APatch 管理器中安装"
+          echo "3. 重启设备"
+          echo "4. 访问 \`http://localhost:8964\` 配置"
+          echo "5. Helper APK 已集成到模块包内（无需单独下载）"
+          echo ""
+          echo "### 📊 文件信息"
+          echo ""
+          echo "| 文件 | 大小 | SHA256 |"
+          echo "|------|------|--------|"
+          echo "| ${OUTPUT_ZIP} | ${FILE_SIZE} | ${SHA256_SUM} |"
+          echo ""
+          echo "### 📖 文档"
+          echo ""
+          echo "- [README](https://github.com/xingxinag/SyncClipboard-magisk/blob/main/README.md)"
+          echo "- [兼容性说明](https://github.com/xingxinag/SyncClipboard-magisk/blob/main/COMPATIBILITY.md)"
+        } > release_notes.md
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+        name: SyncClipboard v${{ steps.get_version.outputs.VERSION }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: |
+          ${{ env.OUTPUT_ZIP }}
+          ${{ env.OUTPUT_ZIP }}.sha256
+          ${{ env.OUTPUT_ZIP }}.md5
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SyncClipboard-magisk_v${{ steps.get_version.outputs.VERSION }}
+        path: |
+          ${{ env.OUTPUT_ZIP }}
+          ${{ env.OUTPUT_ZIP }}.sha256
+          ${{ env.OUTPUT_ZIP }}.md5
+        retention-days: 90

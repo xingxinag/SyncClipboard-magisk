@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.syncclipboard.helper">
+
+    <!-- 后台读取剪贴板权限（Android 10+）-->
+    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+    
+    <!-- ColorOS/OPPO 特殊权限 -->
+    <uses-permission android:name="com.oppo.permission.safe.CLIPBOARD" />
+    <uses-permission android:name="com.oplus.permission.safe.CLIPBOARD" />
+
+    <application
+        android:label="SyncClipboard Helper"
+        android:allowBackup="false">
+        
+        <service
+            android:name=".ClipboardService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.syncclipboard.helper.CLIPBOARD_ACTION" />
+            </intent-filter>
+        </service>
+        
+    </application>
+</manifest>

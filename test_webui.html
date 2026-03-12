@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test WebUI</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; }
+        .result { margin: 10px 0; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>SyncClipboard WebUI Test</h1>
+    
+    <h2>Test Config API</h2>
+    <button onclick="testGetConfig()">GET Config</button>
+    <button onclick="testSaveConfig()">POST Config</button>
+    <div id="configResult" class="result"></div>
+    
+    <h2>Test Clipboard API</h2>
+    <button onclick="testGetClipboard()">GET Clipboard</button>
+    <button onclick="testSyncNow()">POST Sync Now</button>
+    <div id="clipboardResult" class="result"></div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8965';
+        
+        async function testGetConfig() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                const data = await response.json();
+                document.getElementById('configResult').textContent = 
+                    'GET Config: ' + JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('configResult').textContent = 
+                    'Error: ' + err.message;
+            }
+        }
+        
+        async function testSaveConfig() {
+            try {
+                const config = {
+                    accounts: [{
+                        id: 'test-account-1',
+                        name: 'Test Account',
+                        url: 'https://test.example.com/dav/',
+                        username: 'testuser',
+                        password: 'testpass',
+                        created: Math.floor(Date.now() / 1000)
+                    }],
+                    active_account_id: 'test-account-1',
+                    sync_interval: 120,
+                    enabled: true
+                };
+                
+                const response = await fetch(`${API_BASE}/api/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                document.getElementById('configResult').textContent = 
+                    'POST Config: ' + JSON.stringify(result, null, 2) + 
+                    '\n\nSent: ' + JSON.stringify(config, null, 2);
+            } catch (err) {
+                document.getElementById('configResult').textContent = 
+                    'Error: ' + err.message;
+            }
+        }
+        
+        async function testGetClipboard() {
+            try {
+                const response = await fetch(`${API_BASE}/api/clipboard`);
+                const data = await response.json();
+                document.getElementById('clipboardResult').textContent = 
+                    'GET Clipboard: ' + JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('clipboardResult').textContent = 
+                    'Error: ' + err.message;
+            }
+        }
+        
+        async function testSyncNow() {
+            try {
+                const response = await fetch(`${API_BASE}/api/sync/now`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                document.getElementById('clipboardResult').textContent = 
+                    'POST Sync Now: ' + JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('clipboardResult').textContent = 
+                    'Error: ' + err.message;
+            }
+        }
+    </script>
+</body>
+</html>

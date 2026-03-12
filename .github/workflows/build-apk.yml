@@ -1,0 +1,70 @@
+name: Build APK
+
+on:
+  push:
+    paths:
+      - 'cliphelper/**'
+      - 'build.sh'
+      - 'customize.sh'
+      - 'post-fs-data.sh'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Build APK
+        run: |
+          cd cliphelper
+          chmod +x gradlew
+          ./gradlew clean assembleRelease
+
+      - name: Verify helper manifest
+        run: |
+          BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt" dump xmltree cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk AndroidManifest.xml > /tmp/manifest.txt
+          grep -q "com.syncclipboard.helper" /tmp/manifest.txt
+          if grep -q "android.permission.BIND_ACCESSIBILITY_SERVICE" /tmp/manifest.txt; then
+            echo "Unexpected BIND_ACCESSIBILITY_SERVICE found in helper manifest"
+            exit 1
+          fi
+
+      - name: Sign APK
+        run: |
+          BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks cliphelper/signing/syncclipboard.jks --ks-pass pass:android --key-pass pass:android --ks-key-alias syncclipboard --out cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk cliphelper/app/build/outputs/apk/release/app-release-unsigned.apk
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner verify cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk
+
+      - name: Integrate APK into module tree
+        run: |
+          mkdir -p system/priv-app/SyncClipboardHelper
+          cp cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk system/priv-app/SyncClipboardHelper/SyncClipboardHelper.apk
+
+      - name: Build integrated module ZIP
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload integrated module
+        uses: actions/upload-artifact@v4
+        with:
+          name: SyncClipboard-magisk-integrated
+          path: SyncClipboard-magisk_v*.zip
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SyncClipboardHelper
+          path: cliphelper/app/build/outputs/apk/release/SyncClipboardHelper-signed.apk

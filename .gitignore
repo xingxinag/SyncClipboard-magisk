@@ -1,0 +1,42 @@
+# Build outputs
+*.zip
+SyncClipboard_*.zip
+
+# Go build artifacts
+clipserver/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Development files
+docs/plans/
+项目总体大纲.txt

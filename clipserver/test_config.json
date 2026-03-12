@@ -1,0 +1,15 @@
+{
+  "accounts": [
+    {
+      "id": "test-1",
+      "name": "测试账号",
+      "url": "https://test.com",
+      "username": "user",
+      "password": "pass",
+      "created": 1700000000
+    }
+  ],
+  "active_account_id": "test-1",
+  "sync_interval": 60,
+  "enabled": true
+}

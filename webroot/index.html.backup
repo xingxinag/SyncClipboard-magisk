@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncClipboard</title>
+    
+    <!-- Module Manager Safe Area Insets Support -->
+    <link rel="stylesheet" type="text/css" href="/internal/insets.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            /* Module Manager Safe Area Support */
+            padding-top: max(20px, var(--window-inset-top, 20px));
+            padding-bottom: max(20px, var(--window-inset-bottom, 20px));
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .lang-switcher {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: white;
+            font-size: 0.9em;
+        }
+        
+        .lang-switcher:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .status-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-item.active {
+            border-left-color: #48bb78;
+            background: #f0fff4;
+        }
+        
+        .status-label {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .status-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.9em;
+        }
+        
+        .btn-danger {
+            background: #f56565;
+        }
+        
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2d3748;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .clipboard-preview {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            font-family: 'Courier New', monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Toast 提示样式 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 300px;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out;
+            border-left: 4px solid #667eea;
+        }
+        
+        .toast.success {
+            border-left-color: #48bb78;
+        }
+        
+        .toast.error {
+            border-left-color: #f56565;
+        }
+        
+        .toast.info {
+            border-left-color: #4299e1;
+        }
+        
+        .toast-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        
+        .toast-content {
+            flex: 1;
+        }
+        
+        .toast-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .toast-message {
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast 提示容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="lang-switcher" onclick="toggleLanguage()" data-i18n="langSwitch">🌐 EN</div>
+            <h1>🔄 SyncClipboard</h1>
+            <p data-i18n="subtitle">基于 Root 的跨设备剪贴板同步</p>
+        </div>
+        
+        <!-- 状态面板 -->
+        <div class="card">
+            <h2 data-i18n="statusTitle">📊 状态监控</h2>
+            <div class="status-grid">
+                <div class="status-item active">
+                    <div class="status-label" data-i18n="serviceStatus">服务状态</div>
+                    <div class="status-value" id="serviceStatus" data-i18n="running">运行中</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label" data-i18n="lastSync">最后同步</div>
+                    <div class="status-value" id="lastSync">--</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label" data-i18n="syncCount">已同步</div>
+                    <div class="status-value" id="syncCount">0</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label" data-i18n="autoSync">自动同步</div>
+                    <div class="status-value" id="autoSyncStatus">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 当前剪贴板 -->
+        <div class="card">
+            <h2 data-i18n="clipboardTitle">📋 当前剪贴板</h2>
+            <div class="clipboard-preview" id="clipboardContent" data-i18n="loading">正在加载...</div>
+            <div class="button-group">
+                <button class="btn btn-small" onclick="refreshClipboard(event)" data-i18n="refresh">刷新</button>
+                <button class="btn btn-small" onclick="syncNow(event)" data-i18n="syncNow">立即同步</button>
+            </div>
+        </div>
+        
+        <!-- WebDAV 配置 -->
+        <div class="card">
+            <h2 data-i18n="webdavTitle">☁️ WebDAV 配置</h2>
+            <div class="form-group">
+                <label data-i18n="webdavUrl">WebDAV URL</label>
+                <input type="text" id="webdavUrl" placeholder="https://dav.example.com/dav/">
+            </div>
+            <div class="form-group">
+                <label data-i18n="username">用户名</label>
+                <input type="text" id="username">
+            </div>
+            <div class="form-group">
+                <label data-i18n="password">密码</label>
+                <input type="password" id="password">
+            </div>
+            <button class="btn" onclick="saveConfig()" data-i18n="save">保存配置</button>
+        </div>
+        
+        <!-- 同步设置 -->
+        <div class="card">
+            <h2 data-i18n="settingsTitle">⚙️ 同步设置</h2>
+            <div class="form-group">
+                <label data-i18n="syncInterval">同步间隔（秒）</label>
+                <input type="number" id="syncInterval" value="60" min="10" max="3600">
+            </div>
+            <div class="form-group">
+                <label data-i18n="enableSync">启用自动同步</label>
+                <select id="enableSync">
+                    <option value="true" data-i18n="enabled">启用</option>
+                    <option value="false" data-i18n="disabled">禁用</option>
+                </select>
+            </div>
+            <button class="btn" onclick="saveConfig()" data-i18n="save">保存设置</button>
+        </div>
+    </div>
+    
+    <script>
+        // 多语言支持
+        const i18n = {
+            'zh-CN': {
+                langSwitch: '🌐 EN',
+                subtitle: '基于 Root 的跨设备剪贴板同步',
+                statusTitle: '📊 状态监控',
+                serviceStatus: '服务状态',
+                running: '运行中',
+                lastSync: '最后同步',
+                syncCount: '已同步',
+                autoSync: '自动同步',
+                clipboardTitle: '📋 当前剪贴板',
+                loading: '正在加载...',
+                refresh: '刷新',
+                syncNow: '立即同步',
+                webdavTitle: '☁️ WebDAV 配置',
+                webdavUrl: 'WebDAV URL',
+                username: '用户名',
+                password: '密码',
+                save: '保存配置',
+                settingsTitle: '⚙️ 同步设置',
+                syncInterval: '同步间隔（秒）',
+                enableSync: '启用自动同步',
+                enabled: '启用',
+                disabled: '禁用',
+                syncSuccess: '同步完成！',
+                syncFailed: '同步失败',
+                saveSuccess: '配置已保存！',
+                saveFailed: '保存失败',
+                empty: '(空)',
+                getFailed: '获取失败',
+                loading: '处理中...'
+            },
+            'en': {
+                langSwitch: '🌐 中文',
+                subtitle: 'Root-based Cross-device Clipboard Sync',
+                statusTitle: '📊 Status Monitor',
+                serviceStatus: 'Service Status',
+                running: 'Running',
+                lastSync: 'Last Sync',
+                syncCount: 'Synced',
+                autoSync: 'Auto Sync',
+                clipboardTitle: '📋 Current Clipboard',
+                loading: 'Loading...',
+                refresh: 'Refresh',
+                syncNow: 'Sync Now',
+                webdavTitle: '☁️ WebDAV Config',
+                webdavUrl: 'WebDAV URL',
+                username: 'Username',
+                password: 'Password',
+                save: 'Save Config',
+                settingsTitle: '⚙️ Sync Settings',
+                syncInterval: 'Sync Interval (seconds)',
+                enableSync: 'Enable Auto Sync',
+                enabled: 'Enabled',
+                disabled: 'Disabled',
+                syncSuccess: 'Sync completed!',
+                syncFailed: 'Sync failed',
+                saveSuccess: 'Config saved!',
+                saveFailed: 'Save failed',
+                empty: '(empty)',
+                getFailed: 'Failed to get',
+                loading: 'Processing...'
+            }
+        };
+        
+        let currentLang = localStorage.getItem('lang') || 'zh-CN';
+        
+        // Toast 提示函数
+        function showToast(title, message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '✅',
+                error: '❌',
+                info: 'ℹ️',
+                warning: '⚠️'
+            };
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    ${message ? `<div class="toast-message">${message}</div>` : ''}
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => {
+                    container.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+        
+        // 切换语言
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh-CN' ? 'en' : 'zh-CN';
+            localStorage.setItem('lang', currentLang);
+            document.documentElement.lang = currentLang;
+            updateLanguage();
+        }
+        
+        // 更新页面语言
+        function updateLanguage() {
+            const texts = i18n[currentLang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (texts[key]) {
+                    if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+                        el.placeholder = texts[key];
+                    } else {
+                        el.textContent = texts[key];
+                    }
+                }
+            });
+        }
+        
+        // API 基础路径
+        // API 基础路径 - 自动检测
+        const API_BASE = (() => {
+            // 如果在模块管理器的 WebView 中，使用完整 URL
+            if (window.ksu || window.apatch) {
+                return 'http://127.0.0.1:8964';
+            }
+            // 否则使用相对路径
+            return '';
+        })();
+        
+        console.log('API_BASE:', API_BASE);
+        console.log('Running in module manager:', !!(window.ksu || window.apatch));
+        
+        // 加载配置
+        async function loadConfig() {
+            try {
+                console.log('=== Load Config Started ===');
+                console.log('API URL:', `${API_BASE}/api/config`);
+                
+                const response = await fetch(`${API_BASE}/api/config`);
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const config = await response.json();
+                console.log('Loaded config:', config);
+                
+                document.getElementById('webdavUrl').value = config.webdav_url || '';
+                document.getElementById('username').value = config.webdav_username || '';
+                document.getElementById('password').value = config.webdav_password || '';
+                document.getElementById('syncInterval').value = config.sync_interval || 60;
+                document.getElementById('enableSync').value = config.enabled ? 'true' : 'false';
+                document.getElementById('autoSyncStatus').textContent = config.enabled ? 
+                    i18n[currentLang].enabled : i18n[currentLang].disabled;
+                
+                console.log('=== Load Config Success ===');
+            } catch (err) {
+                console.error('=== Load Config Error ===');
+                console.error('Error:', err);
+                showToast(i18n[currentLang].getFailed, err.message, 'error');
+            }
+        }
+        }
+        
+        // 保存配置
+        async function saveConfig() {
+            const saveButtons = document.querySelectorAll('button[onclick*="saveConfig"]');
+            
+            try {
+                console.log('=== Save Config Started ===');
+                
+                // 禁用所有保存按钮
+                saveButtons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.dataset.originalText = btn.textContent;
+                    btn.innerHTML = '<span class="loading"></span> ' + i18n[currentLang].loading;
+                });
+                
+                const config = {
+                    webdav_url: document.getElementById('webdavUrl').value.trim(),
+                    webdav_username: document.getElementById('username').value.trim(),
+                    webdav_password: document.getElementById('password').value,
+                    sync_interval: parseInt(document.getElementById('syncInterval').value) || 60,
+                    enabled: document.getElementById('enableSync').value === 'true'
+                };
+                
+                console.log('Config to save:', config);
+                console.log('API URL:', `${API_BASE}/api/config`);
+                
+                const response = await fetch(`${API_BASE}/api/config`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.json();
+                console.log('Save result:', result);
+                console.log('=== Save Config Success ===');
+                
+                showToast(i18n[currentLang].saveSuccess, '', 'success');
+                
+                // 重新加载配置以确认
+                setTimeout(() => loadConfig(), 500);
+            } catch (err) {
+                console.error('=== Save Config Error ===');
+                console.error('Error type:', err.name);
+                console.error('Error message:', err.message);
+                console.error('Error stack:', err.stack);
+                showToast(i18n[currentLang].saveFailed, err.message, 'error');
+            } finally {
+                // 恢复所有保存按钮
+                saveButtons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.originalText || i18n[currentLang].save;
+                });
+            }
+        }
+        
+        // 刷新剪贴板
+        async function refreshClipboard(evt) {
+            const btn = evt ? evt.target : null;
+            
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.dataset.originalText = btn.textContent;
+                    btn.innerHTML = '<span class="loading"></span>';
+                }
+                
+                const response = await fetch(`${API_BASE}/api/clipboard`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const content = data.content || i18n[currentLang].empty;
+                document.getElementById('clipboardContent').textContent = content;
+                
+                if (btn) {
+                    showToast(i18n[currentLang].refresh, '', 'success');
+                }
+            } catch (err) {
+                console.error('Refresh clipboard error:', err);
+                document.getElementById('clipboardContent').textContent = 
+                    i18n[currentLang].getFailed + ': ' + err.message;
+                showToast(i18n[currentLang].getFailed, err.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.originalText;
+                }
+            }
+        }
+        
+        // 立即同步
+        async function syncNow(evt) {
+            if (!evt) return;
+            const btn = evt.target;
+            const originalText = btn.textContent;
+            
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span> ' + i18n[currentLang].loading;
+                
+                const response = await fetch(`${API_BASE}/api/sync/now`, { method: 'POST' });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                showToast(i18n[currentLang].syncSuccess, '', 'success');
+                await refreshClipboard();
+            } catch (err) {
+                console.error('Sync error:', err);
+                showToast(i18n[currentLang].syncFailed, err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+        
+        // 页面加载时初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            updateLanguage();
+            loadConfig();
+            refreshClipboard();
+            
+            // 每 5 秒刷新一次
+            setInterval(() => {
+                refreshClipboard();
+            }, 5000);
+        });
+    </script>
+    
+    <!-- Module Manager API Compatibility -->
+    <script>
+        // APatch compatibility: expose apatch API as ksu
+        if (window.apatch !== undefined && window.ksu === undefined) {
+            window.ksu = window.apatch;
+        }
+    </script>
+</body>
+</html>

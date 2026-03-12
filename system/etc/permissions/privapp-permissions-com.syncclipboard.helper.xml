@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<permissions>
+    <privapp-permissions package="com.syncclipboard.helper">
+        <permission name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" />
+        <permission name="com.oppo.permission.safe.CLIPBOARD" />
+        <permission name="com.oplus.permission.safe.CLIPBOARD" />
+    </privapp-permissions>
+</permissions>
