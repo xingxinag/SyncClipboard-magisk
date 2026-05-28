@@ -11,9 +11,10 @@ func TestSaveConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	config := &Config{
-		Accounts: []WebDAVAccount{{
+		Accounts: []ServerAccount{{
 			ID:       "acc1",
 			Name:     "test",
+			Type:     ServerTypeWebDAV,
 			URL:      "https://example.com/dav",
 			Username: "user",
 			Password: "pass",

@@ -1,16 +1,27 @@
 package sync
 
 import (
+	"errors"
 	"log"
 	"sync/atomic"
 	"time"
 
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/clipboard"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/config"
+	"github.com/yourusername/syncclipboard-android/clipserver/internal/filesaver"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/monitor"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/syncdata"
-	"github.com/yourusername/syncclipboard-android/clipserver/internal/webdav"
 )
+
+var ErrNotConfigured = webdavErrNotConfigured{}
+
+var ErrRemoteClipboardEmpty = errors.New("remote clipboard content is empty")
+
+type webdavErrNotConfigured struct{}
+
+func (webdavErrNotConfigured) Error() string {
+	return "sync client not configured"
+}
 
 // Manager 管理自动同步
 type Manager struct {
@@ -28,6 +39,22 @@ type Manager struct {
 type SyncClient interface {
 	UploadClipboard(data *syncdata.ClipboardData) error
 	DownloadClipboard() (*syncdata.ClipboardData, error)
+	UploadClipboardText(content string) (*syncdata.ClipboardData, error)
+	DownloadClipboardText() (*syncdata.ClipboardData, string, error)
+	DownloadFile(filename string) ([]byte, error)
+}
+
+type DownloadResult struct {
+	Type        string `json:"type"`
+	AppliedText bool   `json:"applied_text"`
+	SavedFile   bool   `json:"saved_file"`
+	Skipped     bool   `json:"skipped"`
+	Fallback    bool   `json:"fallback"`
+	Message     string `json:"message"`
+	Path        string `json:"path,omitempty"`
+	Filename    string `json:"filename,omitempty"`
+	Size        int    `json:"size,omitempty"`
+	Warning     string `json:"warning,omitempty"`
 }
 
 var (
@@ -71,7 +98,7 @@ func (m *Manager) Start() {
 	}
 
 	if m.webdavClient == nil {
-		log.Println("WebDAV client not configured")
+		log.Println("Sync client not configured")
 		return
 	}
 
@@ -154,7 +181,6 @@ func (m *Manager) syncUploadWithContent(content string) {
 		return
 	}
 
-	// 创建 SyncClipboard 数据结构
 	clipData := syncdata.NewTextClipboard(content)
 
 	// 如果 hash 没有变化，跳过上传
@@ -162,24 +188,23 @@ func (m *Manager) syncUploadWithContent(content string) {
 		return
 	}
 
-	// 上传到 WebDAV
-	err := m.webdavClient.UploadClipboard(clipData)
+	clipData, err := m.webdavClient.UploadClipboardText(content)
 	if err != nil {
-		log.Printf("Failed to upload to WebDAV: %v", err)
+		log.Printf("Failed to upload to server: %v", err)
 		return
 	}
 
 	m.recordSync(clipData.GetHash())
-	log.Printf("Uploaded clipboard to WebDAV (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
+	log.Printf("Uploaded clipboard to server (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
 }
 
 // syncDownload 从 WebDAV 下载并更新本地剪贴板
 func (m *Manager) syncDownload() {
 	// 从 WebDAV 下载
-	clipData, err := m.webdavClient.DownloadClipboard()
+	clipData, content, err := m.webdavClient.DownloadClipboardText()
 	if err != nil {
 		// 文件可能不存在，这是正常的
-		log.Printf("Failed to download from WebDAV: %v", err)
+		log.Printf("Failed to download from server: %v", err)
 		return
 	}
 
@@ -194,21 +219,26 @@ func (m *Manager) syncDownload() {
 		return
 	}
 
+	if content == "" {
+		log.Println("Remote clipboard content is empty, skip auto download")
+		return
+	}
+
 	// 更新本地剪贴板
-	err = clipboardSetFn(clipData.GetText())
+	err = clipboardSetFn(content)
 	if err != nil {
 		log.Printf("Failed to set clipboard: %v", err)
 		return
 	}
 
 	m.recordSync(clipData.GetHash())
-	log.Printf("Downloaded clipboard from WebDAV (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
+	log.Printf("Downloaded clipboard from server (hash: %s, size: %d bytes)", shortHash(clipData.GetHash(), 8), clipData.Size)
 }
 
 // UploadNow 手动上传本地剪贴板到 WebDAV
 func (m *Manager) UploadNow() error {
 	if m.webdavClient == nil {
-		return webdav.ErrNotConfigured
+		return ErrNotConfigured
 	}
 
 	content, err := clipboardGetFn()
@@ -216,39 +246,95 @@ func (m *Manager) UploadNow() error {
 		return err
 	}
 
-	localData := syncdata.NewTextClipboard(content)
-	err = m.webdavClient.UploadClipboard(localData)
+	localData, err := m.webdavClient.UploadClipboardText(content)
 	if err != nil {
 		return err
 	}
 
 	m.recordSync(localData.GetHash())
-	log.Printf("Manual upload pushed to WebDAV (hash: %s, size: %d bytes)", shortHash(localData.GetHash(), 8), localData.Size)
+	log.Printf("Manual upload pushed to server (hash: %s, size: %d bytes)", shortHash(localData.GetHash(), 8), localData.Size)
 	return nil
 }
 
 // DownloadNow 手动从 WebDAV 拉取到本地剪贴板
 func (m *Manager) DownloadNow() error {
+	_, err := m.DownloadRemoteNow()
+	return err
+}
+
+func (m *Manager) DownloadRemoteNow() (*DownloadResult, error) {
 	if m.webdavClient == nil {
-		return webdav.ErrNotConfigured
+		return nil, ErrNotConfigured
 	}
 
 	remoteData, err := m.webdavClient.DownloadClipboard()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if remoteData == nil || !remoteData.IsText() {
-		return nil
+	if remoteData == nil {
+		return &DownloadResult{Skipped: true, Message: "远端剪贴板为空"}, nil
 	}
 
-	if err := clipboardSetFn(remoteData.GetText()); err != nil {
-		return err
+	if remoteData.IsText() {
+		content := remoteData.Text
+		if remoteData.NeedsDataFile() {
+			dataName, err := remoteData.RemoteDataName()
+			if err != nil {
+				return nil, err
+			}
+			data, err := m.webdavClient.DownloadFile(dataName)
+			if err != nil {
+				return nil, err
+			}
+			content = string(data)
+		}
+
+		if content == "" {
+			return &DownloadResult{Type: remoteData.Type, Skipped: true, Message: "远端剪贴板为空，已跳过"}, ErrRemoteClipboardEmpty
+		}
+
+		if err := clipboardSetFn(content); err != nil {
+			if errors.Is(err, clipboard.ErrClipboardAccess) || errors.Is(err, clipboard.ErrClipboardWrite) {
+				saved, saveErr := filesaver.SaveBytes("remote_text.txt", []byte(content))
+				if saveErr != nil {
+					return nil, err
+				}
+				m.recordSync(remoteData.GetHash())
+				log.Printf("Manual download could not write clipboard, saved text fallback to %s (hash: %s, size: %d bytes)", saved.Path, shortHash(remoteData.GetHash(), 8), saved.Size)
+				return &DownloadResult{Type: remoteData.Type, SavedFile: true, Fallback: true, Message: "系统剪贴板写入失败，远端文本已保存为文件", Path: saved.Path, Filename: saved.Filename, Size: saved.Size, Warning: err.Error()}, nil
+			}
+			return nil, err
+		}
+
+		m.recordSync(remoteData.GetHash())
+		log.Printf("Manual download pulled text from server (hash: %s, size: %d bytes)", shortHash(remoteData.GetHash(), 8), remoteData.Size)
+		return &DownloadResult{Type: remoteData.Type, AppliedText: true, Message: "文本已写入本机剪贴板", Size: len(content)}, nil
 	}
 
-	m.recordSync(remoteData.GetHash())
-	log.Printf("Manual download pulled from WebDAV (hash: %s, size: %d bytes)", shortHash(remoteData.GetHash(), 8), remoteData.Size)
-	return nil
+	if remoteData.IsDownloadableFile() {
+		dataName, err := remoteData.RemoteDataName()
+		if err != nil {
+			return nil, err
+		}
+		data, err := m.webdavClient.DownloadFile(dataName)
+		if err != nil {
+			return nil, err
+		}
+		saved, err := filesaver.SaveBytes(remoteData.DisplayName(), data)
+		if err != nil {
+			return nil, err
+		}
+		m.recordSync(remoteData.GetHash())
+		log.Printf("Manual download saved %s from server to %s (hash: %s, size: %d bytes)", remoteData.Type, saved.Path, shortHash(remoteData.GetHash(), 8), saved.Size)
+		message := "远端文件已保存到下载目录"
+		if remoteData.IsGroup() {
+			message = "远端文件组已保存为 ZIP"
+		}
+		return &DownloadResult{Type: remoteData.Type, SavedFile: true, Message: message, Path: saved.Path, Filename: saved.Filename, Size: saved.Size}, nil
+	}
+
+	return &DownloadResult{Type: remoteData.Type, Skipped: true, Message: "暂不支持的远端剪贴板类型，已跳过"}, nil
 }
 
 // SyncNow 兼容旧接口，默认执行手动上传

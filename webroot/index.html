@@ -7,7 +7,6 @@
     
     <!-- Module Manager Safe Area Insets Support -->
     <link rel="stylesheet" type="text/css" href="/internal/insets.css" />
-    
     <style>
         * {
             margin: 0;
@@ -156,6 +155,12 @@
         .form-group select:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .help-text {
+            margin-top: 6px;
+            color: #718096;
+            font-size: 0.85em;
         }
         
         .clipboard-container {
@@ -375,6 +380,17 @@
             color: #718096;
             word-break: break-all;
         }
+
+        .account-type {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #edf2f7;
+            color: #4a5568;
+            font-size: 0.75em;
+            font-weight: 500;
+        }
         
         .account-actions {
             display: flex;
@@ -485,8 +501,17 @@
                 <input type="text" id="newAccountName" placeholder="例如：我的坚果云">
             </div>
             <div class="form-group">
-                <label data-i18n="webdavUrl">WebDAV URL</label>
-                <input type="text" id="newAccountUrl" placeholder="https://dav.example.com/dav/">
+                <label data-i18n="serverType">服务器类型</label>
+                <select id="newAccountType" onchange="updateServerTypeHint()">
+                    <option value="official" data-i18n="officialServer">官方服务器</option>
+                    <option value="custom_official" data-i18n="customOfficialServer">自定义官方服务器</option>
+                    <option value="webdav" data-i18n="webdavServer">WebDAV</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="serverUrl">服务器地址</label>
+                <input type="text" id="newAccountUrl" placeholder="https://server.example.com/SyncClipboard/">
+                <div class="help-text" id="serverTypeHint">官方 API 使用 SyncClipboard.json 和 file/* 路径。</div>
             </div>
             <div class="form-group">
                 <label data-i18n="username">用户名</label>
@@ -518,14 +543,14 @@
                 <input type="number" id="syncInterval" value="60" min="1" max="3600">
             </div>
             <div class="form-group">
-                <label data-i18n="enableAutoUpload">自动上传（本地->WebDAV）</label>
+                <label data-i18n="enableAutoUpload">自动上传（本地->服务器）</label>
                 <select id="enableAutoUpload">
                     <option value="true" data-i18n="enabled">启用</option>
                     <option value="false" data-i18n="disabled">禁用</option>
                 </select>
             </div>
             <div class="form-group">
-                <label data-i18n="enableAutoDownload">自动拉取（WebDAV->本地）</label>
+                <label data-i18n="enableAutoDownload">自动拉取（服务器->本地）</label>
                 <select id="enableAutoDownload">
                     <option value="true" data-i18n="enabled">启用</option>
                     <option value="false" data-i18n="disabled">禁用</option>
@@ -558,6 +583,10 @@
                 addAccount: '添加账号',
                 addAccountTitle: '➕ 添加新账号',
                 accountName: '账号名称',
+                serverType: '服务器类型',
+                officialServer: '官方服务器',
+                customOfficialServer: '自定义官方服务器',
+                webdavServer: 'WebDAV',
                 testConnection: '测试连接',
                 saveAccount: '保存账号',
                 cancel: '取消',
@@ -565,6 +594,7 @@
                 deleteAccount: '删除',
                 activeAccount: '当前激活',
                 webdavUrl: 'WebDAV URL',
+                serverUrl: '服务器地址',
                 username: '用户名',
                 password: '密码',
                 save: '保存配置',
@@ -572,8 +602,8 @@
                 monitorStatus: '监听状态',
                 monitoring: '实时监听中',
                 syncInterval: '同步间隔（秒，范围：1-3600）',
-                enableAutoUpload: '自动上传（本地->WebDAV）',
-                enableAutoDownload: '自动拉取（WebDAV->本地）',
+                enableAutoUpload: '自动上传（本地->服务器）',
+                enableAutoDownload: '自动拉取（服务器->本地）',
                 enabled: '启用',
                 disabled: '禁用',
                 syncSuccess: '上传完成！',
@@ -610,6 +640,10 @@
                 addAccount: 'Add Account',
                 addAccountTitle: '➕ Add New Account',
                 accountName: 'Account Name',
+                serverType: 'Server Type',
+                officialServer: 'Official Server',
+                customOfficialServer: 'Custom Official Server',
+                webdavServer: 'WebDAV',
                 testConnection: 'Test Connection',
                 saveAccount: 'Save Account',
                 cancel: 'Cancel',
@@ -617,6 +651,7 @@
                 deleteAccount: 'Delete',
                 activeAccount: 'Active',
                 webdavUrl: 'WebDAV URL',
+                serverUrl: 'Server URL',
                 username: 'Username',
                 password: 'Password',
                 save: 'Save Config',
@@ -624,8 +659,8 @@
                 monitorStatus: 'Monitor Status',
                 monitoring: 'Real-time Monitoring',
                 syncInterval: 'Sync Interval (seconds, 1-3600)',
-                enableAutoUpload: 'Auto Upload (local -> WebDAV)',
-                enableAutoDownload: 'Auto Pull (WebDAV -> local)',
+                enableAutoUpload: 'Auto Upload (local -> server)',
+                enableAutoDownload: 'Auto Pull (server -> local)',
                 enabled: 'Enabled',
                 disabled: 'Disabled',
                 syncSuccess: 'Upload completed!',
@@ -785,7 +820,7 @@
             if (typeof raw === 'object') {
                 const stdout = raw.stdout ?? raw.out ?? raw.result ?? raw.data ?? '';
                 const stderr = raw.stderr ?? raw.err ?? raw.error ?? '';
-                const code = Number(raw.code ?? raw.exitCode ?? raw.status ?? 0);
+                const code = Number(raw.errno ?? raw.code ?? raw.exitCode ?? raw.status ?? 0);
                 return { code, stdout: String(stdout), stderr: String(stderr) };
             }
             return { code: 0, stdout: String(raw), stderr: '' };
@@ -793,24 +828,36 @@
 
         async function runRootCommand(command) {
             const api = window.ksu || window.apatch;
-            if (!api) {
-                throw new Error('root api unavailable');
-            }
-
             const runners = [];
-            if (typeof api.exec === 'function') {
+
+            if (api && typeof api.exec === 'function') {
+                runners.push(() => new Promise((resolve, reject) => {
+                    const callbackName = `syncclipboard_exec_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+                    window[callbackName] = (errno, stdout, stderr) => {
+                        delete window[callbackName];
+                        resolve({ errno, stdout, stderr });
+                    };
+                    try {
+                        api.exec(command, '{}', callbackName);
+                    } catch (e) {
+                        delete window[callbackName];
+                        reject(e);
+                    }
+                }));
                 runners.push(() => api.exec(command));
-                runners.push(() => api.exec({ cmd: command }));
-                runners.push(() => api.exec({ command }));
             }
-            if (typeof api.shell === 'function') {
+            if (api && typeof api.shell === 'function') {
                 runners.push(() => api.shell(command));
             }
-            if (typeof api.run === 'function') {
+            if (api && typeof api.run === 'function') {
                 runners.push(() => api.run(command));
             }
-            if (typeof api.command === 'function') {
+            if (api && typeof api.command === 'function') {
                 runners.push(() => api.command(command));
+            }
+
+            if (runners.length === 0) {
+                throw new Error('root api unavailable');
             }
 
             let lastErr = null;
@@ -818,13 +865,16 @@
                 try {
                     const raw = await run();
                     const parsed = extractCommandResult(raw);
+                    if (parsed.code !== 0) {
+                        throw new Error(parsed.stderr || parsed.stdout || `exit ${parsed.code}`);
+                    }
                     return parsed;
                 } catch (e) {
                     lastErr = e;
                 }
             }
 
-            const methods = Object.keys(api).filter(k => typeof api[k] === 'function').join(', ');
+            const methods = api ? Object.keys(api).filter(k => typeof api[k] === 'function').join(', ') : '';
             const msg = lastErr ? (lastErr.message || String(lastErr)) : 'no callable root methods';
             throw new Error(`root command not supported: ${msg}; methods=${methods}`);
         }
@@ -925,6 +975,7 @@
             const startedAt = Date.now();
             const path = normalizeApiPath(url);
             const candidates = getApiBaseCandidates();
+            let rootFallbackError = null;
             if (ACTIVE_API_BASE) {
                 candidates.unshift(ACTIVE_API_BASE);
             }
@@ -972,7 +1023,7 @@
                 }
 
                 // 深度定制系统兜底：root 权限直连 curl，绕过 WebView 网络限制
-                if (!options.__rootCurlTried && (window.ksu || window.apatch)) {
+                if (!options.__rootCurlTried) {
                     try {
                         const recovered = await tryRecoverService();
                         if (recovered) {
@@ -983,25 +1034,55 @@
                         if (rootErr && rootErr.action) {
                             throw rootErr;
                         }
+                        rootFallbackError = rootErr;
                     }
                 }
 
                 enableLocalOnlyApiMode();
+                const details = { api_candidates: getApiBaseCandidates() };
+                if (rootFallbackError) {
+                    details.root_fallback_error = rootFallbackError.message || String(rootFallbackError);
+                }
                 throw {
                     action,
                     status: 0,
                     elapsed: Date.now() - startedAt,
-                    details: { api_candidates: getApiBaseCandidates() },
+                    details,
                     message: err.message || 'failed to fetch'
                 };
             }
         }
 
         function formatApiError(err) {
+            if (!err || typeof err !== 'object') {
+                return String(err || '未知错误');
+            }
+            const action = err.action || '本地操作';
+            const status = err.status ?? '-';
+            const elapsed = err.elapsed != null ? `${err.elapsed}ms` : '-';
+            const message = err.message || String(err);
             const details = err.details && Object.keys(err.details).length > 0
                 ? `\n详情：${JSON.stringify(err.details, null, 2)}`
                 : '';
-            return `操作：${err.action}\n状态码：${err.status}\n耗时：${err.elapsed}ms\n错误：${err.message}${details}`;
+            return `操作：${action}\n状态码：${status}\n耗时：${elapsed}\n错误：${message}${details}`;
+        }
+
+        function formatPullResult(data) {
+            const result = data && data.result_data ? data.result_data : null;
+            if (!result) {
+                return data && data.message ? data.message : '远端剪贴板已更新到本机';
+            }
+            if (result.applied_text) {
+                return `${result.message || '文本已写入本机剪贴板'}\n大小：${result.size || 0} 字符`;
+            }
+            if (result.saved_file) {
+                const warning = result.warning ? `\n提示：${result.warning}` : '';
+                return `${result.message || '远端文件已保存'}\n文件：${result.filename || ''}\n路径：${result.path || ''}\n大小：${result.size || 0} bytes${warning}`;
+            }
+            if (result.skipped) {
+                return result.message || '远端内容已跳过';
+            }
+            return result.message || data.message || '拉取完成';
         }
         
         // 加载配置
@@ -1066,6 +1147,22 @@
         }
         
         // 渲染账号列表
+        function serverTypeLabel(type) {
+            if (type === 'official') return i18n[currentLang].officialServer;
+            if (type === 'custom_official') return i18n[currentLang].customOfficialServer;
+            return i18n[currentLang].webdavServer;
+        }
+
+        function updateServerTypeHint() {
+            const type = document.getElementById('newAccountType').value;
+            const hint = document.getElementById('serverTypeHint');
+            if (type === 'webdav') {
+                hint.textContent = 'WebDAV 使用 PROPFIND/GET/PUT 访问 SyncClipboard.json 和 file/*。';
+            } else {
+                hint.textContent = '官方 API 使用 Basic Auth，通过 GET/PUT SyncClipboard.json 和 file/* 同步。';
+            }
+        }
+
         function renderAccountList(config) {
             const accountList = document.getElementById('accountList');
             const accounts = config.accounts || [];
@@ -1081,6 +1178,7 @@
                     <div class="account-info">
                         <div class="account-name">
                             ${account.name}
+                            <span class="account-type">${serverTypeLabel(account.type || 'webdav')}</span>
                             ${account.id === activeId ? `<span style="color: #48bb78; font-size: 0.85em;">(${i18n[currentLang].activeAccount})</span>` : ''}
                         </div>
                         <div class="account-url">${account.url}</div>
@@ -1108,6 +1206,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        type: account.type || 'webdav',
                         url: account.url,
                         username: account.username,
                         password: account.password
@@ -1205,9 +1304,11 @@
         function showAddAccountForm() {
             document.getElementById('addAccountCard').style.display = 'block';
             document.getElementById('newAccountName').value = '';
+            document.getElementById('newAccountType').value = 'official';
             document.getElementById('newAccountUrl').value = '';
             document.getElementById('newAccountUsername').value = '';
             document.getElementById('newAccountPassword').value = '';
+            updateServerTypeHint();
         }
         
         // 取消添加账号
@@ -1225,13 +1326,14 @@
                 btn.innerHTML = '<span class="loading"></span> 测试中...';
                 
                 const data = {
+                    type: document.getElementById('newAccountType').value,
                     url: document.getElementById('newAccountUrl').value.trim(),
                     username: document.getElementById('newAccountUsername').value.trim(),
                     password: document.getElementById('newAccountPassword').value
                 };
                 
                 if (!data.url) {
-                    throw new Error('WebDAV URL 不能为空');
+                    throw new Error('服务器地址不能为空');
                 }
                 
                 showToast('⚡ 正在测试连接...', `服务器：${data.url}`, 'info');
@@ -1262,13 +1364,14 @@
                 
                 const data = {
                     name: document.getElementById('newAccountName').value.trim(),
+                    type: document.getElementById('newAccountType').value,
                     url: document.getElementById('newAccountUrl').value.trim(),
                     username: document.getElementById('newAccountUsername').value.trim(),
                     password: document.getElementById('newAccountPassword').value
                 };
                 
                 if (!data.name || !data.url) {
-                    throw new Error('账号名称和 WebDAV URL 不能为空');
+                    throw new Error('账号名称和服务器地址不能为空');
                 }
                 
                 showToast('⏳ 正在保存账号...', `账号名称：${data.name}`, 'info');
@@ -1281,7 +1384,7 @@
                 
                 // 检查是否是第一个账号
                 const isFirstAccount = result.account && result.account.id;
-                let successMessage = `账号名称：${data.name}\nWebDAV URL：${data.url}\n`;
+                let successMessage = `账号名称：${data.name}\n服务器类型：${serverTypeLabel(data.type)}\n服务器地址：${data.url}\n`;
                 if (isFirstAccount) {
                     successMessage += '这是第一个账号，已自动设为激活账号';
                 } else {
@@ -1421,11 +1524,11 @@
                 btn.disabled = true;
                 btn.innerHTML = '<span class="loading"></span> 上传中...';
                 
-                showToast('⚡ 正在上传...', '将当前本地剪贴板上传到 WebDAV', 'info');
+                showToast('⚡ 正在上传...', '将当前本地剪贴板上传到服务器', 'info');
                 
                 await apiRequest('sync_now', '/api/sync/now', { method: 'POST' });
                 
-                showToast('✓ 上传完成', '本地剪贴板已上传到 WebDAV', 'success');
+                showToast('✓ 上传完成', '本地剪贴板已上传到服务器', 'success');
                 
                 // 刷新剪贴板显示
                 await refreshClipboard();
@@ -1447,11 +1550,11 @@
                 btn.disabled = true;
                 btn.innerHTML = '<span class="loading"></span> 拉取中...';
 
-                showToast('⚡ 正在拉取...', '从 WebDAV 下载最新剪贴板到本机', 'info');
+                showToast('⚡ 正在拉取...', '从服务器下载最新剪贴板到本机', 'info');
 
-                await apiRequest('sync_pull', '/api/sync/pull', { method: 'POST' });
+                const { data } = await apiRequest('sync_pull', '/api/sync/pull', { method: 'POST' });
 
-                showToast('✓ 拉取完成', '远端剪贴板已更新到本机', 'success');
+                showToast('✓ 拉取完成', formatPullResult(data), 'success');
                 await refreshClipboard();
             } catch (err) {
                 console.error('Pull error:', err);

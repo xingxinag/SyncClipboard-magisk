@@ -39,6 +39,27 @@ func TestNewTextClipboard(t *testing.T) {
 	}
 }
 
+func TestNewTextClipboardLargeTextUsesOfficialDataFile(t *testing.T) {
+	text := strings.Repeat("中", TextTransferDataThreshold+1)
+	data := NewTextClipboard(text)
+
+	if !data.HasData {
+		t.Fatal("large text should use external data file")
+	}
+	if data.DataName == nil || !strings.HasPrefix(*data.DataName, "text_") || !strings.HasSuffix(*data.DataName, ".txt") {
+		t.Fatalf("unexpected dataName: %v", data.DataName)
+	}
+	if len([]rune(data.Text)) != TextTransferDataThreshold {
+		t.Fatalf("preview length = %d, want %d", len([]rune(data.Text)), TextTransferDataThreshold)
+	}
+	if data.Size != TextTransferDataThreshold+1 {
+		t.Fatalf("size = %d, want %d", data.Size, TextTransferDataThreshold+1)
+	}
+	if !data.NeedsDataFile() {
+		t.Fatal("large text should need data file")
+	}
+}
+
 func TestToJSON(t *testing.T) {
 	text := "Test content"
 	data := NewTextClipboard(text)
@@ -157,5 +178,30 @@ func TestCalculateHash(t *testing.T) {
 	hash3 := calculateHash("Different")
 	if hash1 == hash3 {
 		t.Error("Different content should produce different hash")
+	}
+}
+
+func TestRemoteDataNameRejectsUnsafePath(t *testing.T) {
+	name := "../secret.txt"
+	data := &ClipboardData{Type: "File", HasData: true, DataName: &name}
+	if _, err := data.RemoteDataName(); err == nil {
+		t.Fatal("expected unsafe dataName to be rejected")
+	}
+}
+
+func TestDisplayNameUsesBasename(t *testing.T) {
+	name := "folder/image.png"
+	data := &ClipboardData{Type: "Image", Text: "folder/image.png", HasData: true, DataName: &name}
+	if got := data.DisplayName(); got != "image.png" {
+		t.Fatalf("DisplayName() = %q, want image.png", got)
+	}
+}
+
+func TestDownloadableTypes(t *testing.T) {
+	for _, typ := range []string{"Image", "File", "Group"} {
+		data := &ClipboardData{Type: typ}
+		if !data.IsDownloadableFile() {
+			t.Fatalf("%s should be downloadable", typ)
+		}
 	}
 }

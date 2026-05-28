@@ -7,20 +7,28 @@ import (
 	"time"
 )
 
-// WebDAVAccount 代表一个 WebDAV 账号
-type WebDAVAccount struct {
-	ID       string `json:"id"`       // 账号唯一标识
-	Name     string `json:"name"`     // 账号名称（用户自定义）
-	URL      string `json:"url"`      // WebDAV 服务器地址
-	Username string `json:"username"` // 用户名
-	Password string `json:"password"` // 密码
-	Created  int64  `json:"created"`  // 创建时间戳
+type ServerType string
+
+const (
+	ServerTypeWebDAV         ServerType = "webdav"
+	ServerTypeOfficial       ServerType = "official"
+	ServerTypeCustomOfficial ServerType = "custom_official"
+)
+
+type ServerAccount struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Type     ServerType `json:"type"`
+	URL      string     `json:"url"`
+	Username string     `json:"username"`
+	Password string     `json:"password"`
+	Created  int64      `json:"created"`
 }
 
 // Config 代表应用配置结构
 type Config struct {
 	// 多账号管理（新版本）
-	Accounts        []WebDAVAccount `json:"accounts"`          // 账号列表
+	Accounts        []ServerAccount `json:"accounts"`          // 账号列表
 	ActiveAccountID string          `json:"active_account_id"` // 当前激活的账号 ID
 
 	// 通用配置
@@ -54,6 +62,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	config.NormalizeSyncMode()
+	config.NormalizeAccounts()
 
 	return &config, nil
 }
@@ -61,6 +70,7 @@ func LoadConfig(path string) (*Config, error) {
 // SaveConfig 保存配置到指定路径
 func SaveConfig(path string, config *Config) error {
 	config.NormalizeSyncMode()
+	config.NormalizeAccounts()
 
 	// 确保目录存在
 	dir := filepath.Dir(path)
@@ -79,7 +89,7 @@ func SaveConfig(path string, config *Config) error {
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Accounts:            []WebDAVAccount{},
+		Accounts:            []ServerAccount{},
 		ActiveAccountID:     "",
 		SyncInterval:        60,
 		Enabled:             false,
@@ -96,8 +106,23 @@ func (c *Config) NormalizeSyncMode() {
 	c.Enabled = c.AutoUploadEnabled || c.AutoDownloadEnabled
 }
 
+func (c *Config) NormalizeAccounts() {
+	for i := range c.Accounts {
+		if c.Accounts[i].Type == "" {
+			c.Accounts[i].Type = ServerTypeWebDAV
+		}
+	}
+}
+
+func (a ServerAccount) EffectiveType() ServerType {
+	if a.Type == "" {
+		return ServerTypeWebDAV
+	}
+	return a.Type
+}
+
 // GetActiveAccount 获取当前激活的账号
-func (c *Config) GetActiveAccount() *WebDAVAccount {
+func (c *Config) GetActiveAccount() *ServerAccount {
 	if c.ActiveAccountID == "" {
 		return nil
 	}
@@ -112,10 +137,14 @@ func (c *Config) GetActiveAccount() *WebDAVAccount {
 }
 
 // AddAccount 添加新账号
-func (c *Config) AddAccount(name, url, username, password string) *WebDAVAccount {
-	account := WebDAVAccount{
+func (c *Config) AddAccount(name string, accountType ServerType, url, username, password string) *ServerAccount {
+	if accountType == "" {
+		accountType = ServerTypeWebDAV
+	}
+	account := ServerAccount{
 		ID:       generateAccountID(),
 		Name:     name,
+		Type:     accountType,
 		URL:      url,
 		Username: username,
 		Password: password,

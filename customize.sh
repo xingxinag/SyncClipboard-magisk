@@ -134,6 +134,7 @@ extract_files() {
   # Extract WebUI
   ui_print "- 提取 Web UI..."
   unzip -o "$ZIPFILE" "webroot/*" -d "$MODPATH" >&2
+  [ -f "$MODPATH/webroot/index.html" ] || abort "! ZIP 缺少 webroot/index.html"
   
   # Extract config template
   unzip -o "$ZIPFILE" "config/*" -d "$MODPATH" >&2 2>/dev/null || true
@@ -148,11 +149,13 @@ extract_files() {
     if [ "$HAS32BIT" = "true" ]; then
       ui_print "- 提取 x86 二进制文件..."
       unzip -o "$ZIPFILE" 'bin/x86/clipserver' -d "$MODPATH" >&2
+      [ -f "$MODPATH/bin/x86/clipserver" ] || abort "! ZIP 缺少 bin/x86/clipserver"
       mv "$MODPATH/bin/x86/clipserver" "$MODPATH/bin/clipserver32"
     fi
     
     ui_print "- 提取 x86_64 二进制文件..."
     unzip -o "$ZIPFILE" 'bin/x86_64/clipserver' -d "$MODPATH" >&2
+    [ -f "$MODPATH/bin/x86_64/clipserver" ] || abort "! ZIP 缺少 bin/x86_64/clipserver"
     mv "$MODPATH/bin/x86_64/clipserver" "$MODPATH/bin/clipserver64"
     ln -s "./clipserver64" "$MODPATH/bin/clipserver"
     
@@ -160,17 +163,20 @@ extract_files() {
     if [ "$HAS32BIT" = "true" ]; then
       ui_print "- 提取 ARM32 二进制文件..."
       unzip -o "$ZIPFILE" 'bin/armeabi-v7a/clipserver' -d "$MODPATH" >&2
+      [ -f "$MODPATH/bin/armeabi-v7a/clipserver" ] || abort "! ZIP 缺少 bin/armeabi-v7a/clipserver"
       mv "$MODPATH/bin/armeabi-v7a/clipserver" "$MODPATH/bin/clipserver32"
     fi
     
     ui_print "- 提取 ARM64 二进制文件..."
     unzip -o "$ZIPFILE" 'bin/arm64-v8a/clipserver' -d "$MODPATH" >&2
+    [ -f "$MODPATH/bin/arm64-v8a/clipserver" ] || abort "! ZIP 缺少 bin/arm64-v8a/clipserver"
     mv "$MODPATH/bin/arm64-v8a/clipserver" "$MODPATH/bin/clipserver64"
     ln -s "./clipserver64" "$MODPATH/bin/clipserver"
     
   else  # ARM only
     ui_print "- 提取 ARM32 二进制文件..."
     unzip -o "$ZIPFILE" 'bin/armeabi-v7a/clipserver' -d "$MODPATH" >&2
+    [ -f "$MODPATH/bin/armeabi-v7a/clipserver" ] || abort "! ZIP 缺少 bin/armeabi-v7a/clipserver"
     mv "$MODPATH/bin/armeabi-v7a/clipserver" "$MODPATH/bin/clipserver"
   fi
   
@@ -196,7 +202,12 @@ setup_config() {
   "accounts": [],
   "active_account_id": "",
   "sync_interval": 60,
-  "enabled": false
+  "enabled": false,
+  "auto_upload_enabled": false,
+  "auto_download_enabled": false,
+  "clipboard_strategy": {
+    "enabled": true
+  }
 }
 EOF
   else

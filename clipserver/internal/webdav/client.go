@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"path"
 	"strings"
 	"time"
 
@@ -22,8 +23,8 @@ var (
 )
 
 const (
-	// SyncClipboardFile 是 SyncClipboard 官方使用的文件名
 	SyncClipboardFile = "SyncClipboard.json"
+	DataFileDir       = "file"
 )
 
 // Client 封装WebDAV客户端
@@ -113,6 +114,19 @@ func (c *Client) UploadClipboard(data *syncdata.ClipboardData) error {
 	return nil
 }
 
+func (c *Client) UploadClipboardText(content string) (*syncdata.ClipboardData, error) {
+	data := syncdata.NewTextClipboard(content)
+	if data.NeedsDataFile() {
+		if err := c.UploadFile(*data.DataName, []byte(content)); err != nil {
+			return nil, err
+		}
+	}
+	if err := c.UploadClipboard(data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // DownloadClipboard 从 SyncClipboard.json 下载剪贴板数据
 func (c *Client) DownloadClipboard() (*syncdata.ClipboardData, error) {
 	data, err := c.client.Read(SyncClipboardFile)
@@ -126,6 +140,63 @@ func (c *Client) DownloadClipboard() (*syncdata.ClipboardData, error) {
 	}
 
 	return clipData, nil
+}
+
+func (c *Client) DownloadClipboardText() (*syncdata.ClipboardData, string, error) {
+	clipData, err := c.DownloadClipboard()
+	if err != nil {
+		return nil, "", err
+	}
+	if clipData == nil || !clipData.IsText() {
+		return clipData, "", nil
+	}
+	if !clipData.NeedsDataFile() {
+		return clipData, clipData.Text, nil
+	}
+	data, err := c.DownloadFile(*clipData.DataName)
+	if err != nil {
+		return nil, "", err
+	}
+	return clipData, string(data), nil
+}
+
+func (c *Client) UploadFile(filename string, data []byte) error {
+	remotePath, err := dataFilePath(filename)
+	if err != nil {
+		return err
+	}
+	reader := bytes.NewReader(data)
+	err = c.client.WriteStream(remotePath, reader, 0644)
+	if err != nil && isNotFoundError(err) {
+		if mkdirErr := c.client.MkdirAll(DataFileDir, 0755); mkdirErr != nil {
+			return classifyNetworkErr(mkdirErr)
+		}
+		err = c.client.WriteStream(remotePath, bytes.NewReader(data), 0644)
+	}
+	if err != nil {
+		return classifyNetworkErr(err)
+	}
+	return nil
+}
+
+func (c *Client) DownloadFile(filename string) ([]byte, error) {
+	remotePath, err := dataFilePath(filename)
+	if err != nil {
+		return nil, err
+	}
+	data, err := c.client.Read(remotePath)
+	if err != nil {
+		return nil, classifyNetworkErr(err)
+	}
+	return data, nil
+}
+
+func dataFilePath(filename string) (string, error) {
+	cleanName := path.Clean(strings.ReplaceAll(filename, "\\", "/"))
+	if cleanName == "." || cleanName == "" || strings.HasPrefix(cleanName, "../") || cleanName == ".." || strings.HasPrefix(cleanName, "/") {
+		return "", fmt.Errorf("invalid data filename: %s", filename)
+	}
+	return path.Join(DataFileDir, cleanName), nil
 }
 
 // TestConnection 测试WebDAV连接
@@ -176,7 +247,15 @@ func isNetworkError(err error) bool {
 	return false
 }
 
-func classifyNetworkErr(err error) error {
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "404") || strings.Contains(lower, "not found") || strings.Contains(lower, "no such file")
+}
+
+func ClassifyNetworkErr(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -187,4 +266,8 @@ func classifyNetworkErr(err error) error {
 		return fmt.Errorf("%w: %v", ErrNetworkStack, err)
 	}
 	return err
+}
+
+func classifyNetworkErr(err error) error {
+	return ClassifyNetworkErr(err)
 }
