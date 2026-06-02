@@ -157,7 +157,7 @@ extract_files() {
     unzip -o "$ZIPFILE" 'bin/x86_64/clipserver' -d "$MODPATH" >&2
     [ -f "$MODPATH/bin/x86_64/clipserver" ] || abort "! ZIP 缺少 bin/x86_64/clipserver"
     mv "$MODPATH/bin/x86_64/clipserver" "$MODPATH/bin/clipserver64"
-    ln -s "./clipserver64" "$MODPATH/bin/clipserver"
+    cp "$MODPATH/bin/clipserver64" "$MODPATH/bin/clipserver"
     
   elif [ "$ARCH" = "arm64" ]; then
     if [ "$HAS32BIT" = "true" ]; then
@@ -171,7 +171,7 @@ extract_files() {
     unzip -o "$ZIPFILE" 'bin/arm64-v8a/clipserver' -d "$MODPATH" >&2
     [ -f "$MODPATH/bin/arm64-v8a/clipserver" ] || abort "! ZIP 缺少 bin/arm64-v8a/clipserver"
     mv "$MODPATH/bin/arm64-v8a/clipserver" "$MODPATH/bin/clipserver64"
-    ln -s "./clipserver64" "$MODPATH/bin/clipserver"
+    cp "$MODPATH/bin/clipserver64" "$MODPATH/bin/clipserver"
     
   else  # ARM only
     ui_print "- 提取 ARM32 二进制文件..."

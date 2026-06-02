@@ -57,6 +57,17 @@ type DownloadResult struct {
 	Warning     string `json:"warning,omitempty"`
 }
 
+type RemoteSnapshot struct {
+	Type     string `json:"type"`
+	Hash     string `json:"hash"`
+	Text     string `json:"text"`
+	HasData  bool   `json:"has_data"`
+	DataName string `json:"data_name,omitempty"`
+	Size     int    `json:"size"`
+	Filename string `json:"filename,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
 var (
 	clipboardGetFn = clipboard.GetClipboard
 	clipboardSetFn = clipboard.SetClipboard
@@ -313,28 +324,35 @@ func (m *Manager) DownloadRemoteNow() (*DownloadResult, error) {
 	}
 
 	if remoteData.IsDownloadableFile() {
-		dataName, err := remoteData.RemoteDataName()
-		if err != nil {
-			return nil, err
-		}
-		data, err := m.webdavClient.DownloadFile(dataName)
-		if err != nil {
-			return nil, err
-		}
-		saved, err := filesaver.SaveBytes(remoteData.DisplayName(), data)
-		if err != nil {
-			return nil, err
-		}
-		m.recordSync(remoteData.GetHash())
-		log.Printf("Manual download saved %s from server to %s (hash: %s, size: %d bytes)", remoteData.Type, saved.Path, shortHash(remoteData.GetHash(), 8), saved.Size)
-		message := "远端文件已保存到下载目录"
-		if remoteData.IsGroup() {
-			message = "远端文件组已保存为 ZIP"
-		}
-		return &DownloadResult{Type: remoteData.Type, SavedFile: true, Message: message, Path: saved.Path, Filename: saved.Filename, Size: saved.Size}, nil
+		return &DownloadResult{Type: remoteData.Type, Skipped: true, Message: "远端图片/文件需要手动处理，已跳过自动下载", Filename: remoteData.DisplayName(), Size: remoteData.Size}, nil
 	}
 
 	return &DownloadResult{Type: remoteData.Type, Skipped: true, Message: "暂不支持的远端剪贴板类型，已跳过"}, nil
+}
+
+func (m *Manager) GetRemoteSnapshot() (*RemoteSnapshot, error) {
+	if m.webdavClient == nil {
+		return nil, ErrNotConfigured
+	}
+	remoteData, err := m.webdavClient.DownloadClipboard()
+	if err != nil {
+		return nil, err
+	}
+	if remoteData == nil {
+		return &RemoteSnapshot{Message: "远端剪贴板为空"}, nil
+	}
+	item := &RemoteSnapshot{
+		Type:     remoteData.Type,
+		Hash:     remoteData.GetHash(),
+		Text:     remoteData.Text,
+		HasData:  remoteData.HasData,
+		Size:     remoteData.Size,
+		Filename: remoteData.DisplayName(),
+	}
+	if remoteData.DataName != nil {
+		item.DataName = *remoteData.DataName
+	}
+	return item, nil
 }
 
 // SyncNow 兼容旧接口，默认执行手动上传

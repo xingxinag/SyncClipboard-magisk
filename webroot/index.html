@@ -410,6 +410,60 @@
             padding: 40px 20px;
             color: #718096;
         }
+
+        .clipboard-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 14px;
+        }
+
+        .clipboard-list-item {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px;
+            background: #f7fafc;
+        }
+
+        .clipboard-list-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            color: #2d3748;
+            font-weight: 700;
+        }
+
+        .clipboard-badge {
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: #edf2f7;
+            color: #4a5568;
+            font-size: 0.75em;
+            white-space: nowrap;
+        }
+
+        .clipboard-list-preview {
+            min-height: 70px;
+            max-height: 140px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding: 10px;
+            border-radius: 8px;
+            background: white;
+            color: #2d3748;
+            font-family: 'Courier New', monospace;
+            font-size: 0.86em;
+            border: 1px solid #e2e8f0;
+        }
+
+        .clipboard-list-meta {
+            margin-top: 10px;
+            color: #718096;
+            font-size: 0.82em;
+            line-height: 1.7;
+        }
         
         .monitor-status {
             display: inline-block;
@@ -425,6 +479,118 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+
+        .page {
+            display: none;
+            animation: pageFade 0.22s ease-out;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .bottom-nav {
+            position: sticky;
+            bottom: max(8px, var(--window-inset-bottom, 8px));
+            z-index: 20;
+            margin: 18px auto 0;
+            max-width: 520px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            padding: 8px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 14px 40px rgba(26, 32, 44, 0.24);
+            backdrop-filter: blur(14px);
+        }
+
+        .nav-item {
+            border: 0;
+            border-radius: 18px;
+            padding: 9px 8px;
+            background: transparent;
+            color: #718096;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-item.active {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 8px 18px rgba(102, 126, 234, 0.35);
+        }
+
+        .nav-icon {
+            font-size: 1.2em;
+            line-height: 1;
+        }
+
+        .nav-label {
+            font-size: 0.78em;
+        }
+
+        @keyframes pageFade {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                max-width: 1280px;
+            }
+
+            .page-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 20px;
+                align-items: start;
+            }
+
+            .page-grid .span-2 {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding-left: 10px;
+                padding-right: 10px;
+                padding-bottom: max(24px, var(--window-inset-bottom, 24px));
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            .button-group,
+            .account-actions {
+                flex-wrap: wrap;
+            }
+
+            .account-item {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .bottom-nav {
+                position: fixed;
+                left: 16px;
+                right: 16px;
+                bottom: max(10px, var(--window-inset-bottom, 10px));
+                margin: 0;
+            }
+
+            .container {
+                padding-bottom: 82px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -438,7 +604,9 @@
             <p data-i18n="subtitle">基于 Root 的跨设备剪贴板同步</p>
         </div>
         
-        <!-- 状态面板 -->
+        <section class="page active" id="pageHome">
+        <div class="page-grid">
+        <div>
         <div class="card">
             <h2 data-i18n="statusTitle">📊 状态监控</h2>
             <div class="status-grid">
@@ -461,7 +629,6 @@
             </div>
         </div>
         
-        <!-- 当前剪贴板 -->
         <div class="card">
             <h2 data-i18n="clipboardTitle">📋 当前剪贴板内容（实时监听）</h2>
             <div class="clipboard-container">
@@ -481,8 +648,39 @@
                 <button class="btn btn-small" onclick="pullNow(event)" data-i18n="pullNow">拉取远端</button>
             </div>
         </div>
+        </div>
+
+        <div>
+        <div class="card">
+            <h2>📚 云端 / 本地端剪贴板内容</h2>
+            <div id="clipboardList" class="clipboard-list">
+                <div class="empty-state">正在加载剪贴板列表...</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-small" onclick="refreshClipboardList(event)">刷新列表</button>
+            </div>
+        </div>
+        </div>
+
+        <div>
+        <div class="card">
+            <h2>⚡ 快捷操作</h2>
+            <div class="button-group">
+                <button class="btn btn-small" onclick="refreshStatus(event)">刷新状态</button>
+                <button class="btn btn-small" onclick="refreshClipboard(event)">读取本地</button>
+                <button class="btn btn-small" onclick="refreshClipboardList(event)">读取云端</button>
+                <button class="btn btn-small btn-success" onclick="syncNow(event)">上传本地</button>
+                <button class="btn btn-small" onclick="pullNow(event)">拉取远端</button>
+            </div>
+            <div class="help-text" style="margin-top: 14px;">桌面宽屏下按“状态 / 内容 / 操作”三栏排布，手机端保持 Flutter 风格的底部三页切换。</div>
+        </div>
+        </div>
+        </div>
+        </section>
         
-        <!-- 账号管理 -->
+        <section class="page" id="pageAccounts">
+        <div class="page-grid">
+        <div>
         <div class="card">
             <h2 data-i18n="accountsTitle">👥 账号管理</h2>
             <div id="accountList" class="account-list">
@@ -492,8 +690,9 @@
                 <button class="btn btn-small btn-success" onclick="showAddAccountForm()" data-i18n="addAccount">添加账号</button>
             </div>
         </div>
+        </div>
         
-        <!-- 添加账号表单（默认隐藏）-->
+        <div>
         <div class="card" id="addAccountCard" style="display: none;">
             <h2 data-i18n="addAccountTitle">➕ 添加新账号</h2>
             <div class="form-group">
@@ -527,8 +726,26 @@
                 <button class="btn btn-small btn-danger" onclick="cancelAddAccount()" data-i18n="cancel">取消</button>
             </div>
         </div>
+        </div>
+        <div>
+        <div class="card">
+            <h2>🧭 协议说明</h2>
+            <div class="status-item" style="margin-bottom: 12px;">
+                <div class="status-label">官方 / 自定义官方</div>
+                <div class="help-text">使用 SyncClipboard.json 与 file/* 路径，兼容 Flutter 项目的官方协议。</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">WebDAV</div>
+                <div class="help-text">保留旧版 WebDAV 账号，适合坚果云等通用 WebDAV 服务。</div>
+            </div>
+        </div>
+        </div>
+        </div>
+        </section>
         
-        <!-- 同步设置 -->
+        <section class="page" id="pageSettings">
+        <div class="page-grid">
+        <div>
         <div class="card">
             <h2 data-i18n="settingsTitle">⚙️ 同步设置</h2>
             <div class="status-item active" style="margin-bottom: 20px;">
@@ -558,6 +775,46 @@
             </div>
             <button class="btn" onclick="saveConfig()" data-i18n="save">保存设置</button>
         </div>
+        </div>
+        <div>
+        <div class="card">
+            <h2>🧪 调试操作</h2>
+            <div class="button-group">
+                <button class="btn btn-small" onclick="refreshStatus(event)">刷新服务</button>
+                <button class="btn btn-small" onclick="refreshClipboard(event)">读取剪贴板</button>
+                <button class="btn btn-small" onclick="syncNow(event)">手动上传</button>
+                <button class="btn btn-small" onclick="pullNow(event)">手动拉取</button>
+            </div>
+            <div class="help-text" style="margin-top: 14px;">对应 Flutter 的调试页能力，用于验证 Root 服务、剪贴板读取和远端同步链路。</div>
+        </div>
+        </div>
+        <div>
+        <div class="card">
+            <h2>📁 下载保存</h2>
+            <div class="status-item active">
+                <div class="status-label">默认目录</div>
+                <div class="status-value" style="font-size: 1em; word-break: break-all;">/sdcard/Download/SyncClipboard</div>
+            </div>
+            <div class="help-text" style="margin-top: 14px;">远端图片、文件、分组 ZIP 和剪贴板写入失败的文本会保存到此目录。</div>
+        </div>
+        </div>
+        </div>
+        </section>
+
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-page="home" onclick="switchPage('home')">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label">首页</span>
+            </button>
+            <button class="nav-item" data-page="accounts" onclick="switchPage('accounts')">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">账号</span>
+            </button>
+            <button class="nav-item" data-page="settings" onclick="switchPage('settings')">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">设置</span>
+            </button>
+        </nav>
 
     </div>
     
@@ -744,6 +1001,30 @@
                     }
                 }
             });
+        }
+
+        function switchPage(page) {
+            const map = {
+                home: 'pageHome',
+                accounts: 'pageAccounts',
+                settings: 'pageSettings'
+            };
+            Object.entries(map).forEach(([key, id]) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.toggle('active', key === page);
+                }
+            });
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.page === page);
+            });
+            localStorage.setItem('syncclipboard_active_page', page);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (page === 'home') {
+                refreshClipboard();
+                refreshClipboardList();
+                refreshStatus();
+            }
         }
         
         // Module Manager API compatibility (must run before API detection)
@@ -1083,6 +1364,89 @@
                 return result.message || '远端内容已跳过';
             }
             return result.message || data.message || '拉取完成';
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function shortValue(value, length = 16) {
+            const text = String(value || '');
+            return text.length > length ? text.slice(0, length) + '…' : text;
+        }
+
+        function clipboardItemPreview(item) {
+            if (!item.available) {
+                return item.error || '暂无可用内容';
+            }
+            if (item.type === 'Text') {
+                const text = item.text || item.message || '空文本';
+                return text.length > 180 ? text.slice(0, 180) + '...' : text;
+            }
+            return item.filename || item.data_name || item.message || '远端文件内容';
+        }
+
+        function renderClipboardList(items) {
+            const list = document.getElementById('clipboardList');
+            if (!items || items.length === 0) {
+                list.innerHTML = '<div class="empty-state">暂无剪贴板内容</div>';
+                return;
+            }
+            const sourceLabels = { local: '本地端', remote: '云端' };
+            list.innerHTML = items.map(item => {
+                const title = sourceLabels[item.source] || item.source || '未知来源';
+                const type = item.type || '-';
+                const preview = clipboardItemPreview(item);
+                const meta = [
+                    `状态：${item.available ? '可用' : '不可用'}`,
+                    `类型：${type}`,
+                    `大小：${item.size || 0}`,
+                    item.hash ? `Hash：${shortValue(item.hash, 18)}` : '',
+                    item.data_name ? `数据文件：${item.data_name}` : '',
+                    item.filename && item.filename !== item.data_name ? `文件名：${item.filename}` : ''
+                ].filter(Boolean).join('<br>');
+                return `
+                    <div class="clipboard-list-item">
+                        <div class="clipboard-list-title">
+                            <span>${escapeHtml(title)}</span>
+                            <span class="clipboard-badge">${escapeHtml(type)}</span>
+                        </div>
+                        <div class="clipboard-list-preview">${escapeHtml(preview)}</div>
+                        <div class="clipboard-list-meta">${meta}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function refreshClipboardList(evt) {
+            const btn = evt ? evt.target : null;
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.dataset.originalText = btn.textContent;
+                    btn.innerHTML = '<span class="loading"></span>';
+                }
+                const { data } = await apiRequest('clipboard_list', '/api/clipboard/list');
+                renderClipboardList(data.items || []);
+                if (btn) {
+                    showToast('✓ 列表已刷新', '已更新云端和本地端剪贴板内容', 'success');
+                }
+            } catch (err) {
+                document.getElementById('clipboardList').innerHTML = `<div class="empty-state">获取失败：${escapeHtml(err.message || 'unknown')}</div>`;
+                if (btn) {
+                    showToast('✗ 列表获取失败', formatApiError(err), 'error');
+                }
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.originalText;
+                }
+            }
         }
         
         // 加载配置
@@ -1532,6 +1896,7 @@
                 
                 // 刷新剪贴板显示
                 await refreshClipboard();
+                await refreshClipboardList();
             } catch (err) {
                 console.error('Sync error:', err);
                 showToast('✗ 同步失败', formatApiError(err), 'error');
@@ -1556,6 +1921,7 @@
 
                 showToast('✓ 拉取完成', formatPullResult(data), 'success');
                 await refreshClipboard();
+                await refreshClipboardList();
             } catch (err) {
                 console.error('Pull error:', err);
                 showToast('✗ 拉取失败', formatApiError(err), 'error');
@@ -1576,8 +1942,10 @@
             ACTIVE_API_BASE = 'http://127.0.0.1:8964';
             await detectApiBase(true);
             updateLanguage();
+            switchPage(localStorage.getItem('syncclipboard_active_page') || 'home');
             loadConfig();
             refreshClipboard();
+            refreshClipboardList();
             refreshStatus();
             
             // 每 2 秒刷新一次剪贴板（实时监听展示）

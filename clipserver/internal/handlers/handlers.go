@@ -198,6 +198,49 @@ func (h *Handler) GetClipboardHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"content": content})
 }
 
+func (h *Handler) GetClipboardListHandler(w http.ResponseWriter, r *http.Request) {
+	localContent, localErr := clipboard.GetClipboard()
+	localItem := map[string]interface{}{
+		"source":     "local",
+		"type":       "Text",
+		"text":       localContent,
+		"size":       len([]rune(localContent)),
+		"available":  localErr == nil,
+		"updated_at": time.Now().Unix(),
+	}
+	if localErr != nil {
+		localItem["error"] = friendlyErrorMessage(localErr)
+	}
+
+	remoteItem := map[string]interface{}{
+		"source":    "remote",
+		"available": false,
+	}
+	if h.syncManager == nil {
+		remoteItem["error"] = "同步管理器未初始化"
+	} else {
+		remoteSnapshot, err := h.syncManager.GetRemoteSnapshot()
+		if err != nil {
+			remoteItem["error"] = friendlyErrorMessage(err)
+		} else if remoteSnapshot != nil {
+			remoteItem["available"] = true
+			remoteItem["type"] = remoteSnapshot.Type
+			remoteItem["hash"] = remoteSnapshot.Hash
+			remoteItem["text"] = remoteSnapshot.Text
+			remoteItem["has_data"] = remoteSnapshot.HasData
+			remoteItem["data_name"] = remoteSnapshot.DataName
+			remoteItem["size"] = remoteSnapshot.Size
+			remoteItem["filename"] = remoteSnapshot.Filename
+			remoteItem["message"] = remoteSnapshot.Message
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"items":  []map[string]interface{}{localItem, remoteItem},
+	})
+}
+
 // SyncNowHandler 立即触发同步
 func (h *Handler) SyncNowHandler(w http.ResponseWriter, r *http.Request) {
 	if h.syncManager == nil {

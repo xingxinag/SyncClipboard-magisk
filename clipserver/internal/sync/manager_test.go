@@ -12,13 +12,14 @@ import (
 )
 
 type fakeSyncClient struct {
-	downloadData  *syncdata.ClipboardData
-	downloadText  string
-	downloadErr   error
-	uploadErr     error
-	uploadCalled  bool
-	uploadPayload *syncdata.ClipboardData
-	files         map[string][]byte
+	downloadData       *syncdata.ClipboardData
+	downloadText       string
+	downloadErr        error
+	uploadErr          error
+	uploadCalled       bool
+	uploadPayload      *syncdata.ClipboardData
+	files              map[string][]byte
+	downloadFileCalled bool
 }
 
 func (f *fakeSyncClient) UploadClipboard(data *syncdata.ClipboardData) error {
@@ -55,6 +56,7 @@ func (f *fakeSyncClient) DownloadClipboardText() (*syncdata.ClipboardData, strin
 }
 
 func (f *fakeSyncClient) DownloadFile(filename string) ([]byte, error) {
+	f.downloadFileCalled = true
 	if f.files == nil {
 		return nil, errors.New("file not found")
 	}
@@ -131,29 +133,27 @@ func TestDownloadNowWritesRemoteClipboard(t *testing.T) {
 	}
 }
 
-func TestDownloadRemoteNowSavesRemoteFile(t *testing.T) {
-	t.Setenv("SYNCCLIPBOARD_DOWNLOAD_DIR", t.TempDir())
+func TestDownloadRemoteNowSkipsImageAndFileForManualHandling(t *testing.T) {
+	for _, typ := range []string{"Image", "File"} {
+		t.Run(typ, func(t *testing.T) {
+			name := "sample.bin"
+			client := &fakeSyncClient{
+				downloadData: &syncdata.ClipboardData{Type: typ, Text: name, HasData: true, DataName: &name, Size: 4},
+				files:        map[string][]byte{name: []byte("DATA")},
+			}
+			m := NewManager(&config.Config{}, client)
 
-	name := "sample.txt"
-	client := &fakeSyncClient{
-		downloadData: &syncdata.ClipboardData{Type: "File", Text: name, HasData: true, DataName: &name, Size: 4},
-		files:        map[string][]byte{name: []byte("DATA")},
-	}
-	m := NewManager(&config.Config{}, client)
-
-	result, err := m.DownloadRemoteNow()
-	if err != nil {
-		t.Fatalf("DownloadRemoteNow returned error: %v", err)
-	}
-	if result == nil || !result.SavedFile {
-		t.Fatalf("expected saved file result, got %#v", result)
-	}
-	data, err := os.ReadFile(filepath.Clean(result.Path))
-	if err != nil {
-		t.Fatalf("saved file not readable: %v", err)
-	}
-	if string(data) != "DATA" {
-		t.Fatalf("saved data = %q, want DATA", string(data))
+			result, err := m.DownloadRemoteNow()
+			if err != nil {
+				t.Fatalf("DownloadRemoteNow returned error: %v", err)
+			}
+			if result == nil || !result.Skipped || result.SavedFile {
+				t.Fatalf("expected skipped manual handling result, got %#v", result)
+			}
+			if client.downloadFileCalled {
+				t.Fatalf("%s should not download file automatically", typ)
+			}
+		})
 	}
 }
 

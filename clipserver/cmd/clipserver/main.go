@@ -159,6 +159,7 @@ func main() {
 		}
 	})))
 	http.HandleFunc("/api/clipboard", withRequestLog("clipboard_get", withCORS(h.GetClipboardHandler)))
+	http.HandleFunc("/api/clipboard/list", withRequestLog("clipboard_list", withCORS(h.GetClipboardListHandler)))
 	http.HandleFunc("/api/sync/now", withRequestLog("sync_now", withCORS(h.SyncNowHandler)))
 	http.HandleFunc("/api/sync/pull", withRequestLog("sync_pull", withCORS(h.SyncPullHandler)))
 	http.HandleFunc("/api/sync/status", withRequestLog("sync_status", withCORS(h.GetSyncStatusHandler)))
