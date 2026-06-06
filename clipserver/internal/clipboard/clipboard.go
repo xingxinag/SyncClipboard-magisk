@@ -18,6 +18,8 @@ var (
 	ErrEmptyContent    = errors.New("clipboard content is empty")
 	ErrContentTooLarge = errors.New("clipboard content exceeds maximum size")
 	ErrClipboardAccess = errors.New("failed to access system clipboard")
+	ErrClipboardRead   = errors.New("failed to read system clipboard")
+	ErrClipboardWrite  = errors.New("failed to write system clipboard")
 )
 
 func isInvalidClipboardOutput(content string) bool {
@@ -76,7 +78,7 @@ func GetClipboard() (string, error) {
 	}
 
 	log.Printf("[clipboard/get] failed all methods")
-	return "", fmt.Errorf("%w: all %d methods failed", ErrClipboardAccess, len(strat.readOrder))
+	return "", fmt.Errorf("%w: %w: all %d methods failed", ErrClipboardAccess, ErrClipboardRead, len(strat.readOrder))
 }
 
 // getClipboardCmd 使用 cmd clipboard 命令（Android 10+）
@@ -205,7 +207,7 @@ func SetClipboard(content string) error {
 	}
 
 	log.Printf("[clipboard/set] failed all methods")
-	return fmt.Errorf("%w: all %d methods failed", ErrClipboardAccess, len(strat.writeOrder))
+	return fmt.Errorf("%w: %w: all %d methods failed", ErrClipboardAccess, ErrClipboardWrite, len(strat.writeOrder))
 }
 
 // setClipboardCmd 使用 cmd clipboard 命令（Android 10+）

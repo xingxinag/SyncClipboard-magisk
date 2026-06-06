@@ -17,7 +17,7 @@ import (
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/handlers"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/opslog"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/sync"
-	"github.com/yourusername/syncclipboard-android/clipserver/internal/webdav"
+	"github.com/yourusername/syncclipboard-android/clipserver/internal/syncclient"
 )
 
 var reqSeq int64
@@ -127,24 +127,23 @@ func main() {
 		"webroot":     *webrootPath,
 	})
 
-	// 初始化 WebDAV 客户端和同步管理器
-	var webdavClient *webdav.Client
+	var client sync.SyncClient
 	activeAccount := cfg.GetActiveAccount()
 	if activeAccount != nil {
-		webdavClient, err = webdav.NewClient(activeAccount.URL, activeAccount.Username, activeAccount.Password)
+		client, err = syncclient.New(*activeAccount)
 		if err != nil {
-			log.Printf("Failed to initialize WebDAV client: %v", err)
+			log.Printf("Failed to initialize sync client: %v", err)
 		} else {
-			log.Printf("WebDAV client initialized (account: %s)", activeAccount.Name)
+			log.Printf("Sync client initialized (account: %s, type: %s)", activeAccount.Name, activeAccount.EffectiveType())
 		}
 	}
 
 	// 创建同步管理器
-	syncManager := sync.NewManager(cfg, webdavClient)
+	syncManager := sync.NewManager(cfg, client)
 	h.SetSyncManager(syncManager)
 
 	// 如果配置启用，启动自动同步
-	if cfg.Enabled && webdavClient != nil {
+	if cfg.Enabled && client != nil {
 		syncManager.Start()
 	}
 
@@ -160,6 +159,7 @@ func main() {
 		}
 	})))
 	http.HandleFunc("/api/clipboard", withRequestLog("clipboard_get", withCORS(h.GetClipboardHandler)))
+	http.HandleFunc("/api/clipboard/list", withRequestLog("clipboard_list", withCORS(h.GetClipboardListHandler)))
 	http.HandleFunc("/api/sync/now", withRequestLog("sync_now", withCORS(h.SyncNowHandler)))
 	http.HandleFunc("/api/sync/pull", withRequestLog("sync_pull", withCORS(h.SyncPullHandler)))
 	http.HandleFunc("/api/sync/status", withRequestLog("sync_status", withCORS(h.GetSyncStatusHandler)))

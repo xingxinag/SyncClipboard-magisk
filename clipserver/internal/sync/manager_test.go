@@ -2,19 +2,24 @@ package sync
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/yourusername/syncclipboard-android/clipserver/internal/clipboard"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/config"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/syncdata"
-	"github.com/yourusername/syncclipboard-android/clipserver/internal/webdav"
 )
 
 type fakeSyncClient struct {
-	downloadData  *syncdata.ClipboardData
-	downloadErr   error
-	uploadErr     error
-	uploadCalled  bool
-	uploadPayload *syncdata.ClipboardData
+	downloadData       *syncdata.ClipboardData
+	downloadText       string
+	downloadErr        error
+	uploadErr          error
+	uploadCalled       bool
+	uploadPayload      *syncdata.ClipboardData
+	files              map[string][]byte
+	downloadFileCalled bool
 }
 
 func (f *fakeSyncClient) UploadClipboard(data *syncdata.ClipboardData) error {
@@ -28,6 +33,38 @@ func (f *fakeSyncClient) DownloadClipboard() (*syncdata.ClipboardData, error) {
 		return nil, f.downloadErr
 	}
 	return f.downloadData, nil
+}
+
+func (f *fakeSyncClient) UploadClipboardText(content string) (*syncdata.ClipboardData, error) {
+	data := syncdata.NewTextClipboard(content)
+	if err := f.UploadClipboard(data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (f *fakeSyncClient) DownloadClipboardText() (*syncdata.ClipboardData, string, error) {
+	data, err := f.DownloadClipboard()
+	if err != nil {
+		return nil, "", err
+	}
+	text := f.downloadText
+	if text == "" && data != nil {
+		text = data.Text
+	}
+	return data, text, nil
+}
+
+func (f *fakeSyncClient) DownloadFile(filename string) ([]byte, error) {
+	f.downloadFileCalled = true
+	if f.files == nil {
+		return nil, errors.New("file not found")
+	}
+	data, ok := f.files[filename]
+	if !ok {
+		return nil, errors.New("file not found")
+	}
+	return data, nil
 }
 
 func withClipboardStubs(t *testing.T, getFn func() (string, error), setFn func(string) error) {
@@ -66,7 +103,7 @@ func TestSyncNowUploadsLocalClipboard(t *testing.T) {
 func TestUploadNowReturnsNotConfiguredWithoutClient(t *testing.T) {
 	m := NewManager(&config.Config{}, nil)
 
-	if err := m.UploadNow(); !errors.Is(err, webdav.ErrNotConfigured) {
+	if err := m.UploadNow(); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
 	}
 }
@@ -94,6 +131,60 @@ func TestDownloadNowWritesRemoteClipboard(t *testing.T) {
 	if client.uploadCalled {
 		t.Fatalf("download should not trigger upload")
 	}
+}
+
+func TestDownloadRemoteNowSkipsImageAndFileForManualHandling(t *testing.T) {
+	for _, typ := range []string{"Image", "File"} {
+		t.Run(typ, func(t *testing.T) {
+			name := "sample.bin"
+			client := &fakeSyncClient{
+				downloadData: &syncdata.ClipboardData{Type: typ, Text: name, HasData: true, DataName: &name, Size: 4},
+				files:        map[string][]byte{name: []byte("DATA")},
+			}
+			m := NewManager(&config.Config{}, client)
+
+			result, err := m.DownloadRemoteNow()
+			if err != nil {
+				t.Fatalf("DownloadRemoteNow returned error: %v", err)
+			}
+			if result == nil || !result.Skipped || result.SavedFile {
+				t.Fatalf("expected skipped manual handling result, got %#v", result)
+			}
+			if client.downloadFileCalled {
+				t.Fatalf("%s should not download file automatically", typ)
+			}
+		})
+	}
+}
+
+func TestDownloadRemoteNowSavesTextWhenClipboardWriteFails(t *testing.T) {
+	t.Setenv("SYNCCLIPBOARD_DOWNLOAD_DIR", t.TempDir())
+	client := &fakeSyncClient{downloadData: syncdata.NewTextClipboard("REMOTE_TEXT")}
+	m := NewManager(&config.Config{}, client)
+
+	withClipboardStubs(t,
+		func() (string, error) { return "IGNORED", nil },
+		func(content string) error { return clipboardWriteErrForTest() },
+	)
+
+	result, err := m.DownloadRemoteNow()
+	if err != nil {
+		t.Fatalf("DownloadRemoteNow returned error: %v", err)
+	}
+	if result == nil || !result.SavedFile || !result.Fallback {
+		t.Fatalf("expected fallback saved file result, got %#v", result)
+	}
+	data, err := os.ReadFile(filepath.Clean(result.Path))
+	if err != nil {
+		t.Fatalf("saved fallback file not readable: %v", err)
+	}
+	if string(data) != "REMOTE_TEXT" {
+		t.Fatalf("saved fallback data = %q, want REMOTE_TEXT", string(data))
+	}
+}
+
+func clipboardWriteErrForTest() error {
+	return errors.Join(clipboard.ErrClipboardAccess, clipboard.ErrClipboardWrite)
 }
 
 // TestDownloadNowEmptyHashNoPanic 回归测试：远端数据 hash 字段为空时不应 panic

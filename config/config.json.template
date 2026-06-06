@@ -1,7 +1,11 @@
 {
-  "webdav_url": "",
-  "webdav_username": "",
-  "webdav_password": "",
+  "accounts": [],
+  "active_account_id": "",
   "sync_interval": 60,
-  "enabled": false
+  "enabled": false,
+  "auto_upload_enabled": false,
+  "auto_download_enabled": false,
+  "clipboard_strategy": {
+    "enabled": true
+  }
 }

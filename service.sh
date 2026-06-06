@@ -25,6 +25,41 @@ move_pid_to_cgroup() {
   fi
 }
 
+process_name_matches() {
+  TARGET_PID="$1"
+  EXPECTED_NAME="$2"
+  if ! is_pid_alive "$TARGET_PID"; then
+    return 1
+  fi
+  COMM=$(cat "/proc/$TARGET_PID/comm" 2>/dev/null)
+  [ "$COMM" = "$EXPECTED_NAME" ]
+}
+
+is_existing_supervisor() {
+  TARGET_PID="$1"
+  if ! is_pid_alive "$TARGET_PID"; then
+    return 1
+  fi
+  CMDLINE=$(tr '\0' ' ' < "/proc/$TARGET_PID/cmdline" 2>/dev/null)
+  case "$CMDLINE" in
+    *syncclipboard*service.sh*) return 0 ;;
+    *SyncClipboard*service.sh*) return 0 ;;
+  esac
+  return 1
+}
+
+health_check() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 2 "http://127.0.0.1:8964/health" >/dev/null 2>&1
+    return $?
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -q -T 2 -O /dev/null "http://127.0.0.1:8964/health" >/dev/null 2>&1
+    return $?
+  fi
+  return 2
+}
+
 normalize_process_cgroups() {
   TARGET_PID="$1"
   if ! is_pid_alive "$TARGET_PID"; then
@@ -97,7 +132,7 @@ EOF
 stop_stale_server() {
   if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE" 2>/dev/null)
-    if is_pid_alive "$OLD_PID"; then
+  if process_name_matches "$OLD_PID" "clipserver"; then
       log "Stopping stale clipserver instance: $OLD_PID"
       kill "$OLD_PID" 2>/dev/null
       sleep 2
@@ -123,14 +158,28 @@ start_clipserver() {
     CGROUP_SUMMARY=$(cat "/proc/$CLIPSERVER_PID/cgroup" 2>/dev/null | tr '\n' ';')
     log "clipserver cgroups: $CGROUP_SUMMARY"
   fi
+
+  sleep 2
+  if health_check; then
+    log "clipserver health check ok"
+  else
+    HEALTH_CODE=$?
+    log "WARN: clipserver health check failed (code=$HEALTH_CODE)"
+    if command -v netstat >/dev/null 2>&1; then
+      netstat -ltnp 2>/dev/null | grep 8964 >> "$LOG_FILE" 2>&1
+    elif command -v ss >/dev/null 2>&1; then
+      ss -ltnp 2>/dev/null | grep 8964 >> "$LOG_FILE" 2>&1
+    fi
+  fi
 }
 
 # 确保单实例监控器
 if [ -f "$MONITOR_PID_FILE" ]; then
   OLD_MONITOR_PID=$(cat "$MONITOR_PID_FILE" 2>/dev/null)
-  if is_pid_alive "$OLD_MONITOR_PID"; then
+  if is_existing_supervisor "$OLD_MONITOR_PID"; then
     exit 0
   fi
+  rm -f "$MONITOR_PID_FILE"
 fi
 echo $$ > "$MONITOR_PID_FILE"
 

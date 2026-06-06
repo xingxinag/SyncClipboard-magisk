@@ -17,7 +17,7 @@ chmod 0770 "$HOOK_DIR"
 
 # 创建 WebUI 目录的符号链接（如果需要）
 if [ ! -d "$CONFIG_DIR/webui" ]; then
-  ln -sf "$MODDIR/webui" "$CONFIG_DIR/webui"
+  ln -sf "$MODDIR/webroot" "$CONFIG_DIR/webui"
 fi
 
 # 设置 SELinux 上下文（如果支持）

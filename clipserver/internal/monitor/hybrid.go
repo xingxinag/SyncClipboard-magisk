@@ -16,12 +16,12 @@ type HybridMonitor struct {
 }
 
 // NewHybridMonitor 创建混合监听器
-func NewHybridMonitor() *HybridMonitor {
+func NewHybridMonitor(interval time.Duration) *HybridMonitor {
 	return &HybridMonitor{
 		monitors: []ClipboardMonitor{
-			NewLogcatMonitor(),                 // 优先级 1: logcat（最快）
-			NewInotifyMonitor(),                // 优先级 2: inotify（次快）
-			NewPollingMonitor(1 * time.Second), // 优先级 3: 轮询（兜底）
+			NewPollingMonitor(interval),
+			NewLogcatMonitor(),
+			NewInotifyMonitor(),
 		},
 	}
 }

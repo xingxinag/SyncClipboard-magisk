@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/config"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/opslog"
 	"github.com/yourusername/syncclipboard-android/clipserver/internal/sync"
-	"github.com/yourusername/syncclipboard-android/clipserver/internal/webdav"
+	"github.com/yourusername/syncclipboard-android/clipserver/internal/syncclient"
 )
 
 // Handler 封装所有HTTP处理器
@@ -29,17 +30,31 @@ func (h *Handler) writeError(w http.ResponseWriter, action string, status int, e
 	if fields == nil {
 		fields = map[string]interface{}{}
 	}
+	message := friendlyErrorMessage(err)
 	fields["http_status"] = status
 	fields["error"] = err.Error()
 	fields["result"] = "error"
 	fields["code"] = fmt.Sprintf("E_HTTP_%d", status)
-	opslog.Error("api", action, err.Error(), fields)
+	opslog.Error("api", action, message, fields)
 	writeJSON(w, status, map[string]interface{}{
 		"status":  "error",
 		"action":  action,
-		"message": err.Error(),
+		"message": message,
 		"details": fields,
 	})
+}
+
+func friendlyErrorMessage(err error) string {
+	if errors.Is(err, clipboard.ErrClipboardRead) {
+		return "读取系统剪贴板失败：请检查 LSPosed 系统 Hook 是否启用，或尝试复制一段文本后重试"
+	}
+	if errors.Is(err, clipboard.ErrClipboardWrite) {
+		return "写入系统剪贴板失败：请检查 LSPosed 系统 Hook 是否启用；远端文本可改为保存文件兜底"
+	}
+	if errors.Is(err, clipboard.ErrClipboardAccess) {
+		return "访问系统剪贴板失败：请检查 Root/LSPosed Hook 权限"
+	}
+	return err.Error()
 }
 
 func (h *Handler) writeOK(w http.ResponseWriter, action, message string, payload map[string]interface{}) {
@@ -64,14 +79,16 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	activeAccount := cfg.GetActiveAccount()
 	accountCount := len(cfg.Accounts)
-	webdavConfigured := activeAccount != nil && activeAccount.URL != ""
+	serverConfigured := activeAccount != nil && activeAccount.URL != ""
 
 	var syncRunning bool
 	var syncCount int64
 	var lastSyncUnix int64
+	var syncDebug interface{}
 	if h.syncManager != nil {
 		syncRunning = h.syncManager.IsRunning()
 		syncCount, lastSyncUnix = h.syncManager.GetStats()
+		syncDebug = h.syncManager.GetDebugState()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -84,7 +101,9 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		"sync_count":            syncCount,
 		"last_sync_unix":        lastSyncUnix,
 		"account_count":         accountCount,
-		"webdav_configured":     webdavConfigured,
+		"webdav_configured":     serverConfigured,
+		"server_configured":     serverConfigured,
+		"sync_debug":            syncDebug,
 		"active_account_name": func() string {
 			if activeAccount != nil {
 				return activeAccount.Name
@@ -141,22 +160,26 @@ func (h *Handler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg.Enabled = cfg.AutoUploadEnabled || cfg.AutoDownloadEnabled
+	opslog.Info("debug", "auto_sync_config_update", "received config update", map[string]interface{}{"enabled": cfg.Enabled, "auto_upload_enabled": cfg.AutoUploadEnabled, "auto_download_enabled": cfg.AutoDownloadEnabled, "sync_interval": cfg.SyncInterval, "account_count": len(cfg.Accounts), "active_account_id": cfg.ActiveAccountID})
 
 	if err := config.SaveConfig(h.configPath, &cfg); err != nil {
 		h.writeError(w, "update_config", http.StatusInternalServerError, err, nil)
 		return
 	}
 
-	// 重新初始化 WebDAV 客户端和同步管理器
-	var client *webdav.Client
+	var client sync.SyncClient
 	activeAccount := cfg.GetActiveAccount()
 	if activeAccount != nil {
 		var err error
-		client, err = webdav.NewClient(activeAccount.URL, activeAccount.Username, activeAccount.Password)
+		client, err = syncclient.New(*activeAccount)
 		if err != nil {
-			h.writeError(w, "update_config", http.StatusInternalServerError, err, map[string]interface{}{"stage": "init_webdav"})
+			opslog.Error("debug", "auto_sync_client_init", "sync client init failed after config update", map[string]interface{}{"error": err.Error(), "server_type": activeAccount.EffectiveType(), "account_name": activeAccount.Name})
+			h.writeError(w, "update_config", http.StatusInternalServerError, err, map[string]interface{}{"stage": "init_sync_client", "server_type": activeAccount.EffectiveType()})
 			return
 		}
+		opslog.Info("debug", "auto_sync_client_init", "sync client init ok after config update", map[string]interface{}{"server_type": activeAccount.EffectiveType(), "account_name": activeAccount.Name})
+	} else {
+		opslog.Warn("debug", "auto_sync_client_init", "no active account after config update", nil)
 	}
 
 	// 更新同步管理器
@@ -183,6 +206,49 @@ func (h *Handler) GetClipboardHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"content": content})
 }
 
+func (h *Handler) GetClipboardListHandler(w http.ResponseWriter, r *http.Request) {
+	localContent, localErr := clipboard.GetClipboard()
+	localItem := map[string]interface{}{
+		"source":     "local",
+		"type":       "Text",
+		"text":       localContent,
+		"size":       len([]rune(localContent)),
+		"available":  localErr == nil,
+		"updated_at": time.Now().Unix(),
+	}
+	if localErr != nil {
+		localItem["error"] = friendlyErrorMessage(localErr)
+	}
+
+	remoteItem := map[string]interface{}{
+		"source":    "remote",
+		"available": false,
+	}
+	if h.syncManager == nil {
+		remoteItem["error"] = "同步管理器未初始化"
+	} else {
+		remoteSnapshot, err := h.syncManager.GetRemoteSnapshot()
+		if err != nil {
+			remoteItem["error"] = friendlyErrorMessage(err)
+		} else if remoteSnapshot != nil {
+			remoteItem["available"] = true
+			remoteItem["type"] = remoteSnapshot.Type
+			remoteItem["hash"] = remoteSnapshot.Hash
+			remoteItem["text"] = remoteSnapshot.Text
+			remoteItem["has_data"] = remoteSnapshot.HasData
+			remoteItem["data_name"] = remoteSnapshot.DataName
+			remoteItem["size"] = remoteSnapshot.Size
+			remoteItem["filename"] = remoteSnapshot.Filename
+			remoteItem["message"] = remoteSnapshot.Message
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"items":  []map[string]interface{}{localItem, remoteItem},
+	})
+}
+
 // SyncNowHandler 立即触发同步
 func (h *Handler) SyncNowHandler(w http.ResponseWriter, r *http.Request) {
 	if h.syncManager == nil {
@@ -204,11 +270,20 @@ func (h *Handler) SyncPullHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.syncManager.DownloadNow(); err != nil {
+	result, err := h.syncManager.DownloadRemoteNow()
+	if err != nil {
+		if errors.Is(err, sync.ErrRemoteClipboardEmpty) {
+			h.writeOK(w, "sync_pull", "远端剪贴板为空，已跳过", map[string]interface{}{"result_data": result, "skipped": true})
+			return
+		}
 		h.writeError(w, "sync_pull", http.StatusInternalServerError, err, nil)
 		return
 	}
-	h.writeOK(w, "sync_pull", "下载完成", nil)
+	message := "下载完成"
+	if result != nil && result.Message != "" {
+		message = result.Message
+	}
+	h.writeOK(w, "sync_pull", message, map[string]interface{}{"result_data": result})
 }
 
 // GetSyncStatusHandler 获取同步状态
@@ -225,10 +300,11 @@ func (h *Handler) GetSyncStatusHandler(w http.ResponseWriter, r *http.Request) {
 // AddAccountHandler 添加新账号
 func (h *Handler) AddAccountHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     string `json:"name"`
-		URL      string `json:"url"`
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Type     config.ServerType `json:"type"`
+		Name     string            `json:"name"`
+		URL      string            `json:"url"`
+		Username string            `json:"username"`
+		Password string            `json:"password"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -248,8 +324,8 @@ func (h *Handler) AddAccountHandler(w http.ResponseWriter, r *http.Request) {
 		cfg = config.DefaultConfig()
 	}
 
-	// 添加账号
-	account := cfg.AddAccount(req.Name, req.URL, req.Username, req.Password)
+	account := cfg.AddAccount(req.Name, req.Type, req.URL, req.Username, req.Password)
+	opslog.Info("debug", "auto_sync_account_add", "account added", map[string]interface{}{"enabled": cfg.Enabled, "auto_upload_enabled": cfg.AutoUploadEnabled, "auto_download_enabled": cfg.AutoDownloadEnabled, "active_account_id": cfg.ActiveAccountID, "account_id": account.ID, "account_count": len(cfg.Accounts)})
 
 	// 保存配置
 	if err := config.SaveConfig(h.configPath, cfg); err != nil {
@@ -299,10 +375,10 @@ func (h *Handler) RemoveAccountHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 如果删除的是激活账号，需要更新同步管理器
 	if h.syncManager != nil {
-		var client *webdav.Client
+		var client sync.SyncClient
 		activeAccount := cfg.GetActiveAccount()
 		if activeAccount != nil {
-			client, _ = webdav.NewClient(activeAccount.URL, activeAccount.Username, activeAccount.Password)
+			client, _ = syncclient.New(*activeAccount)
 		}
 		h.syncManager.UpdateConfig(cfg, client)
 	}
@@ -349,10 +425,10 @@ func (h *Handler) SetActiveAccountHandler(w http.ResponseWriter, r *http.Request
 
 	// 更新同步管理器
 	if h.syncManager != nil {
-		var client *webdav.Client
+		var client sync.SyncClient
 		activeAccount := cfg.GetActiveAccount()
 		if activeAccount != nil {
-			client, _ = webdav.NewClient(activeAccount.URL, activeAccount.Username, activeAccount.Password)
+			client, _ = syncclient.New(*activeAccount)
 		}
 		h.syncManager.UpdateConfig(cfg, client)
 	}
@@ -365,9 +441,10 @@ func (h *Handler) SetActiveAccountHandler(w http.ResponseWriter, r *http.Request
 // TestAccountHandler 测试账号连接
 func (h *Handler) TestAccountHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URL      string `json:"url"`
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Type     config.ServerType `json:"type"`
+		URL      string            `json:"url"`
+		Username string            `json:"username"`
+		Password string            `json:"password"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -380,14 +457,12 @@ func (h *Handler) TestAccountHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 尝试连接
-	client, err := webdav.NewClient(req.URL, req.Username, req.Password)
+	client, err := syncclient.NewTestable(config.ServerAccount{Type: req.Type, URL: req.URL, Username: req.Username, Password: req.Password})
 	if err != nil {
 		h.writeError(w, "test_account", http.StatusOK, err, map[string]interface{}{"url": req.URL})
 		return
 	}
 
-	// 尝试列出目录（测试连接）
 	if err := client.TestConnection(); err != nil {
 		h.writeError(w, "test_account", http.StatusOK, err, map[string]interface{}{"url": req.URL})
 		return
