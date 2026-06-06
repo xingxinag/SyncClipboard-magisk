@@ -68,6 +68,21 @@ type RemoteSnapshot struct {
 	Message  string `json:"message,omitempty"`
 }
 
+type DebugState struct {
+	Running             bool   `json:"running"`
+	ClientConfigured    bool   `json:"client_configured"`
+	ConfigEnabled       bool   `json:"config_enabled"`
+	AutoUploadEnabled   bool   `json:"auto_upload_enabled"`
+	AutoDownloadEnabled bool   `json:"auto_download_enabled"`
+	SyncInterval        int    `json:"sync_interval"`
+	MonitorConfigured   bool   `json:"monitor_configured"`
+	MonitorName         string `json:"monitor_name"`
+	TickerConfigured    bool   `json:"ticker_configured"`
+	LastHash            string `json:"last_hash"`
+	SyncCount           int64  `json:"sync_count"`
+	LastSyncUnix        int64  `json:"last_sync_unix"`
+}
+
 var (
 	clipboardGetFn = clipboard.GetClipboard
 	clipboardSetFn = clipboard.SetClipboard
@@ -93,23 +108,24 @@ func NewManager(cfg *config.Config, client SyncClient) *Manager {
 
 // Start 启动自动同步
 func (m *Manager) Start() {
+	log.Printf("[auto-sync-debug] start requested enabled=%v upload=%v download=%v interval=%d client=%v running=%v", m.config.Enabled, m.config.AutoUploadEnabled, m.config.AutoDownloadEnabled, m.config.SyncInterval, m.webdavClient != nil, m.running)
 	if m.running {
-		log.Println("Sync manager already running")
+		log.Println("[auto-sync-debug] start skipped: already running")
 		return
 	}
 
 	if !m.config.Enabled {
-		log.Println("Sync is disabled in config")
+		log.Println("[auto-sync-debug] start skipped: config disabled")
 		return
 	}
 
 	if !m.config.AutoUploadEnabled && !m.config.AutoDownloadEnabled {
-		log.Println("Both auto upload and auto download are disabled")
+		log.Println("[auto-sync-debug] start skipped: both directions disabled")
 		return
 	}
 
 	if m.webdavClient == nil {
-		log.Println("Sync client not configured")
+		log.Println("[auto-sync-debug] start skipped: sync client not configured")
 		return
 	}
 
@@ -126,24 +142,28 @@ func (m *Manager) Start() {
 
 	// 只有自动上传开启时才需要实时监听剪贴板变化
 	if m.config.AutoUploadEnabled {
-		m.monitor = monitor.NewHybridMonitor()
+		interval := time.Duration(m.config.SyncInterval) * time.Second
+		m.monitor = monitor.NewHybridMonitor(interval)
 		if err := m.monitor.Start(func(content string) {
+			log.Printf("[auto-sync-debug] monitor callback content_size=%d", len([]rune(content)))
 			m.syncUploadWithContent(content)
 		}); err != nil {
-			log.Printf("Failed to start clipboard monitor: %v", err)
+			log.Printf("[auto-sync-debug] clipboard monitor start error: %v", err)
 		}
-		log.Println("Clipboard monitor started for real-time upload")
+		log.Printf("[auto-sync-debug] clipboard monitor state name=%s running=%v", m.monitor.Name(), m.monitor.IsRunning())
 	}
 
 	go func() {
 		// 启动时先执行一次下载同步
 		if m.config.AutoDownloadEnabled {
+			log.Println("[auto-sync-debug] initial auto download tick")
 			m.syncDownload()
 		}
 
 		for {
 			select {
 			case <-tickerC:
+				log.Println("[auto-sync-debug] scheduled auto download tick")
 				// 定时下载检查（上传由 monitor 触发）
 				m.syncDownload()
 			case <-m.stopChan:
@@ -189,13 +209,16 @@ func (m *Manager) syncUpload() {
 // syncUploadWithContent 使用指定内容上传到 WebDAV
 func (m *Manager) syncUploadWithContent(content string) {
 	if m.webdavClient == nil {
+		log.Println("[auto-sync-debug] upload skipped: sync client not configured")
 		return
 	}
 
 	clipData := syncdata.NewTextClipboard(content)
+	log.Printf("[auto-sync-debug] upload candidate hash=%s size=%d last_hash=%s", shortHash(clipData.GetHash(), 8), clipData.Size, shortHash(m.lastHash, 8))
 
 	// 如果 hash 没有变化，跳过上传
 	if clipData.GetHash() == m.lastHash {
+		log.Println("[auto-sync-debug] upload skipped: same hash")
 		return
 	}
 
@@ -215,30 +238,36 @@ func (m *Manager) syncDownload() {
 	clipData, content, err := m.webdavClient.DownloadClipboardText()
 	if err != nil {
 		// 文件可能不存在，这是正常的
-		log.Printf("Failed to download from server: %v", err)
+		log.Printf("[auto-sync-debug] download failed: %v", err)
 		return
 	}
+	if clipData == nil {
+		log.Println("[auto-sync-debug] download skipped: remote clipboard is nil")
+		return
+	}
+	log.Printf("[auto-sync-debug] download candidate type=%s hash=%s size=%d content_size=%d last_hash=%s", clipData.Type, shortHash(clipData.GetHash(), 8), clipData.Size, len([]rune(content)), shortHash(m.lastHash, 8))
 
 	// 只处理文本类型
 	if !clipData.IsText() {
-		log.Printf("Skipping non-text clipboard type: %s", clipData.Type)
+		log.Printf("[auto-sync-debug] download skipped: non-text type=%s", clipData.Type)
 		return
 	}
 
 	// 如果 hash 相同，说明内容没变化
 	if clipData.GetHash() == m.lastHash {
+		log.Println("[auto-sync-debug] download skipped: same hash")
 		return
 	}
 
 	if content == "" {
-		log.Println("Remote clipboard content is empty, skip auto download")
+		log.Println("[auto-sync-debug] download skipped: empty remote text")
 		return
 	}
 
 	// 更新本地剪贴板
 	err = clipboardSetFn(content)
 	if err != nil {
-		log.Printf("Failed to set clipboard: %v", err)
+		log.Printf("[auto-sync-debug] download failed: set clipboard error=%v", err)
 		return
 	}
 
@@ -374,6 +403,28 @@ func (m *Manager) IsRunning() bool {
 // GetStats 返回同步统计信息
 func (m *Manager) GetStats() (syncCount int64, lastSyncUnix int64) {
 	return atomic.LoadInt64(&m.syncCount), atomic.LoadInt64(&m.lastSyncUnix)
+}
+
+func (m *Manager) GetDebugState() DebugState {
+	state := DebugState{
+		Running:             m.running,
+		ClientConfigured:    m.webdavClient != nil,
+		ConfigEnabled:       m.config != nil && m.config.Enabled,
+		AutoUploadEnabled:   m.config != nil && m.config.AutoUploadEnabled,
+		AutoDownloadEnabled: m.config != nil && m.config.AutoDownloadEnabled,
+		MonitorConfigured:   m.monitor != nil,
+		TickerConfigured:    m.ticker != nil,
+		LastHash:            shortHash(m.lastHash, 8),
+		SyncCount:           atomic.LoadInt64(&m.syncCount),
+		LastSyncUnix:        atomic.LoadInt64(&m.lastSyncUnix),
+	}
+	if m.config != nil {
+		state.SyncInterval = m.config.SyncInterval
+	}
+	if m.monitor != nil {
+		state.MonitorName = m.monitor.Name()
+	}
+	return state
 }
 
 // UpdateConfig 更新配置并重启同步

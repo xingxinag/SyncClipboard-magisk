@@ -84,9 +84,11 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 	var syncRunning bool
 	var syncCount int64
 	var lastSyncUnix int64
+	var syncDebug interface{}
 	if h.syncManager != nil {
 		syncRunning = h.syncManager.IsRunning()
 		syncCount, lastSyncUnix = h.syncManager.GetStats()
+		syncDebug = h.syncManager.GetDebugState()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -101,6 +103,7 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		"account_count":         accountCount,
 		"webdav_configured":     serverConfigured,
 		"server_configured":     serverConfigured,
+		"sync_debug":            syncDebug,
 		"active_account_name": func() string {
 			if activeAccount != nil {
 				return activeAccount.Name
@@ -157,6 +160,7 @@ func (h *Handler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg.Enabled = cfg.AutoUploadEnabled || cfg.AutoDownloadEnabled
+	opslog.Info("debug", "auto_sync_config_update", "received config update", map[string]interface{}{"enabled": cfg.Enabled, "auto_upload_enabled": cfg.AutoUploadEnabled, "auto_download_enabled": cfg.AutoDownloadEnabled, "sync_interval": cfg.SyncInterval, "account_count": len(cfg.Accounts), "active_account_id": cfg.ActiveAccountID})
 
 	if err := config.SaveConfig(h.configPath, &cfg); err != nil {
 		h.writeError(w, "update_config", http.StatusInternalServerError, err, nil)
@@ -169,9 +173,13 @@ func (h *Handler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 		var err error
 		client, err = syncclient.New(*activeAccount)
 		if err != nil {
+			opslog.Error("debug", "auto_sync_client_init", "sync client init failed after config update", map[string]interface{}{"error": err.Error(), "server_type": activeAccount.EffectiveType(), "account_name": activeAccount.Name})
 			h.writeError(w, "update_config", http.StatusInternalServerError, err, map[string]interface{}{"stage": "init_sync_client", "server_type": activeAccount.EffectiveType()})
 			return
 		}
+		opslog.Info("debug", "auto_sync_client_init", "sync client init ok after config update", map[string]interface{}{"server_type": activeAccount.EffectiveType(), "account_name": activeAccount.Name})
+	} else {
+		opslog.Warn("debug", "auto_sync_client_init", "no active account after config update", nil)
 	}
 
 	// 更新同步管理器
@@ -317,6 +325,7 @@ func (h *Handler) AddAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	account := cfg.AddAccount(req.Name, req.Type, req.URL, req.Username, req.Password)
+	opslog.Info("debug", "auto_sync_account_add", "account added", map[string]interface{}{"enabled": cfg.Enabled, "auto_upload_enabled": cfg.AutoUploadEnabled, "auto_download_enabled": cfg.AutoDownloadEnabled, "active_account_id": cfg.ActiveAccountID, "account_id": account.ID, "account_count": len(cfg.Accounts)})
 
 	// 保存配置
 	if err := config.SaveConfig(h.configPath, cfg); err != nil {
